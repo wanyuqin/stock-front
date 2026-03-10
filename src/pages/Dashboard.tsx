@@ -2,6 +2,7 @@ import { useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Star, TrendingUp, TrendingDown, Activity, Database, ExternalLink } from 'lucide-react'
 import Topbar from '@/components/Topbar'
+import DailyReportView from '@/components/DailyReportView'
 import { useQuery } from '@/hooks/useQuery'
 import { fetchWatchlist, fetchStocks } from '@/api/stock'
 import {
@@ -33,7 +34,7 @@ function StatCard({ label, value, sub, icon: Icon, color = 'text-ink-secondary' 
   )
 }
 
-// ── 自选股行情快照表 ──────────────────────────────────────────────
+// ── 自选股行情快照 ────────────────────────────────────────────────
 function WatchlistSnapshot() {
   const navigate = useNavigate()
   const { data, loading, error, refetch } = useQuery(
@@ -75,9 +76,7 @@ function WatchlistSnapshot() {
           {loading && items.length === 0
             ? Array.from({ length: 4 }).map((_, i) => <SkeletonRow key={i} cols={5} />)
             : items.length === 0
-              ? (
-                <tr><td colSpan={5}><EmptyState message="还没有自选股，去添加一只吧" /></td></tr>
-              )
+              ? <tr><td colSpan={5}><EmptyState message="还没有自选股，去添加一只吧" /></td></tr>
               : items.map(item => {
                   const q     = item.quote
                   const rate  = q?.change_rate ?? 0
@@ -185,17 +184,42 @@ export default function Dashboard() {
         onRefresh={refetch}
         loading={wlLoading}
       />
+
       <div className="flex-1 overflow-y-auto p-5 space-y-5">
+        {/* ── 统计卡片行 ── */}
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-          <StatCard label="自选股"  value={String(items.length)} sub="只股票" icon={Star}         color="text-accent-amber" />
-          <StatCard label="上涨"    value={String(upCount)}   sub={items.length > 0 ? `占比 ${Math.round(upCount   / items.length * 100)}%` : '—'} icon={TrendingUp}   color="text-accent-green" />
-          <StatCard label="下跌"    value={String(downCount)} sub={items.length > 0 ? `占比 ${Math.round(downCount / items.length * 100)}%` : '—'} icon={TrendingDown}  color="text-accent-red"   />
-          <StatCard label="总成交额" value={formatAmount(totalAmt)} sub="自选股合计" icon={Activity} color="text-accent-cyan" />
+          <StatCard
+            label="自选股"   value={String(items.length)} sub="只股票" icon={Star}
+            color="text-accent-amber"
+          />
+          <StatCard
+            label="上涨"     value={String(upCount)}
+            sub={items.length > 0 ? `占比 ${Math.round(upCount   / items.length * 100)}%` : '—'}
+            icon={TrendingUp}  color="text-accent-green"
+          />
+          <StatCard
+            label="下跌"     value={String(downCount)}
+            sub={items.length > 0 ? `占比 ${Math.round(downCount / items.length * 100)}%` : '—'}
+            icon={TrendingDown} color="text-accent-red"
+          />
+          <StatCard
+            label="总成交额"  value={formatAmount(totalAmt)} sub="自选股合计"
+            icon={Activity}   color="text-accent-cyan"
+          />
         </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-          <div className="xl:col-span-2"><WatchlistSnapshot /></div>
-          <div><StockLibrary /></div>
+        {/* ── 主内容区：左（行情 + 股票库）右（AI 复盘简报）── */}
+        <div className="grid grid-cols-1 xl:grid-cols-5 gap-5">
+          {/* 左侧 3/5 */}
+          <div className="xl:col-span-3 space-y-5">
+            <WatchlistSnapshot />
+            <StockLibrary />
+          </div>
+
+          {/* 右侧 2/5 — 每日复盘简报 */}
+          <div className="xl:col-span-2">
+            <DailyReportView maxContentHeight={520} />
+          </div>
         </div>
       </div>
     </div>
