@@ -1,0 +1,126 @@
+/* ── 全局基础样式 ── */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html {
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background-color: #0a0e14;
+    color: #e8edf3;
+    font-family: 'DM Sans', system-ui, sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* 滚动条样式 */
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #0d1117;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #1e2d3d;
+    border-radius: 2px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #3d5166;
+  }
+
+  /* 数字/数据统一使用等宽字体 */
+  .font-data {
+    font-family: 'JetBrains Mono', 'Roboto Mono', monospace;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer components {
+  /* 上涨/下跌颜色工具类 */
+  .text-up   { @apply text-accent-green; }
+  .text-down { @apply text-accent-red; }
+  .text-flat { @apply text-ink-secondary; }
+
+  /* 卡片基础样式 */
+  .card {
+    @apply bg-terminal-surface border border-terminal-border rounded-lg;
+  }
+
+  /* 终端风格标签 */
+  .tag {
+    @apply inline-flex items-center gap-1 px-2 py-0.5
+           text-xs font-mono rounded
+           bg-terminal-muted border border-terminal-border
+           text-ink-secondary;
+  }
+
+  /* 按钮 - 主要 */
+  .btn-primary {
+    @apply inline-flex items-center gap-2 px-4 py-2
+           text-sm font-medium rounded-md
+           bg-accent-green text-terminal-bg
+           hover:bg-opacity-90 active:scale-95
+           transition-all duration-150;
+  }
+
+  /* 按钮 - 幽灵 */
+  .btn-ghost {
+    @apply inline-flex items-center gap-2 px-3 py-1.5
+           text-sm font-medium rounded-md
+           text-ink-secondary border border-terminal-border
+           hover:text-ink-primary hover:border-accent-blue hover:bg-terminal-muted
+           transition-all duration-150;
+  }
+
+  /* 数据行高亮（表格行 hover）*/
+  .data-row {
+    @apply border-b border-terminal-border
+           hover:bg-terminal-muted
+           transition-colors duration-100 cursor-pointer;
+  }
+}
+
+/* ── 特殊动效 ── */
+
+/* 实时数据闪烁（价格更新时）*/
+@keyframes flash-up {
+  0%, 100% { background-color: transparent; }
+  50%       { background-color: rgba(0, 217, 126, 0.15); }
+}
+@keyframes flash-down {
+  0%, 100% { background-color: transparent; }
+  50%       { background-color: rgba(255, 77, 106, 0.15); }
+}
+.flash-up   { animation: flash-up   0.6s ease-out; }
+.flash-down { animation: flash-down 0.6s ease-out; }
+
+/* 终端光标 */
+.cursor::after {
+  content: '▋';
+  animation: blink 1s step-end infinite;
+  color: #00d97e;
+  margin-left: 2px;
+}
+
+/* 扫描线背景纹理（营造 CRT 感）*/
+.scanline {
+  background-image: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.03) 2px,
+    rgba(0, 0, 0, 0.03) 4px
+  );
+}
