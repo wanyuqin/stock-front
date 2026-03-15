@@ -1,55 +1,51 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   ScrollText, TrendingUp, TrendingDown, Plus, X,
   RefreshCw, Activity, DollarSign, BarChart2, Trophy,
+  Search, Filter,
 } from 'lucide-react'
 import Topbar from '@/components/Topbar'
 import { useQuery } from '@/hooks/useQuery'
-import {
-  formatAmount, EmptyState, SkeletonRow, ErrorBanner,
-} from '@/components/shared'
+import { formatAmount, EmptyState, SkeletonRow, ErrorBanner } from '@/components/shared'
 import http from '@/api/http'
 import type { ApiResponse } from '@/types'
 
 // ═══════════════════════════════════════════════════════════════
-// 类型定义（对齐后端 service.go 的 JSON 字段）
+// 类型
 // ═══════════════════════════════════════════════════════════════
 
 interface TradeLogVO {
   id:         number
-  user_id:    number
   stock_code: string
   action:     'BUY' | 'SELL'
   price:      number
   volume:     number
-  amount:     number   // price × volume，后端已计算
+  amount:     number
   traded_at:  string
   reason:     string
-  created_at: string
 }
 
 interface TradeListResponse {
-  code:  string
-  items: TradeLogVO[]
-  count: number
+  items:  TradeLogVO[]
+  count:  number
+  limit?: number
+  offset?: number
 }
 
-// PositionSummary 对应后端 service.PositionSummary（JSON 字段）
 interface PositionSummary {
-  stock_code:       string
-  hold_volume:      number
-  avg_cost_price:   number
-  total_cost:       number
-  realized_pnl:     number
-  realized_trades:  number
-  current_price:    number
-  unrealized_pnl:   number
-  unrealized_pct:   number
-  total_pnl:        number
+  stock_code:      string
+  hold_volume:     number
+  avg_cost_price:  number
+  total_cost:      number
+  realized_pnl:    number
+  realized_trades: number
+  current_price:   number
+  unrealized_pnl:  number
+  unrealized_pct:  number
+  total_pnl:       number
 }
 
-// PerformanceReport 对应后端 service.PerformanceReport（JSON 字段）
 interface PerformanceReport {
   total_realized_pnl:   number
   total_unrealized_pnl: number
@@ -58,13 +54,12 @@ interface PerformanceReport {
   total_trades:         number
   win_positions:        number
   lose_positions:       number
-  calculated_at:        string
   note:                 string
 }
 
-// ── API 函数 ──────────────────────────────────────────────────────
-const fetchAllTrades = (code: string) =>
-  http.get<ApiResponse<TradeListResponse>>(`/trades/${code}`)
+// ── API ──────────────────────────────────────────────────────────
+const fetchAllTrades = (limit = 200) =>
+  http.get<ApiResponse<TradeListResponse>>('/trades', { params: { limit } })
 
 const fetchPerformance = () =>
   http.get<ApiResponse<PerformanceReport>>('/stats/performance')
@@ -72,17 +67,19 @@ const fetchPerformance = () =>
 const postTrade = (body: object) =>
   http.post<ApiResponse<TradeLogVO>>('/trades', body)
 
-// ── 颜色工具 ──────────────────────────────────────────────────────
+// ── 工具 ──────────────────────────────────────────────────────────
 const pnlColor = (v: number) =>
   v > 0 ? 'text-accent-green' : v < 0 ? 'text-accent-red' : 'text-ink-secondary'
-const pnlSign  = (v: number) => v > 0 ? '+' : ''
+const pnlSign = (v: number) => v > 0 ? '+' : ''
 
-// ── 辅助组件：标签 ────────────────────────────────────────────────
 const LabelXs = ({ children }: { children: React.ReactNode }) => (
   <label className="block text-[10px] font-mono text-ink-muted mb-1.5 uppercase tracking-wider">
     {children}
   </label>
 )
+
+const fDate = (iso: string) =>
+  new Date(iso).toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
 
 // ═══════════════════════════════════════════════════════════════
 // 添加交易弹框
@@ -100,10 +97,9 @@ function AddTradeDialog({ onClose, onSuccess }: { onClose: () => void; onSuccess
     setErr('')
     const price  = parseFloat(form.price)
     const volume = parseInt(form.volume, 10)
-    if (!form.stock_code.trim()) { setErr('请输入股票代码'); return }
-    if (isNaN(price) || price <= 0)   { setErr('请输入有效的价格（大于 0）'); return }
+    if (!form.stock_code.trim())      { setErr('请输入股票代码'); return }
+    if (isNaN(price)  || price  <= 0) { setErr('请输入有效的价格（大于 0）'); return }
     if (isNaN(volume) || volume <= 0) { setErr('请输入有效的数量（大于 0）'); return }
-
     setLoading(true)
     try {
       await postTrade({
@@ -124,52 +120,55 @@ function AddTradeDialog({ onClose, onSuccess }: { onClose: () => void; onSuccess
   }
 
   const inputCls = `w-full bg-terminal-muted border border-terminal-border rounded-md
-    px-3 py-2 text-sm text-ink-primary placeholder-ink-muted
-    focus:outline-none focus:border-accent-blue focus:ring-1 focus:ring-accent-blue/30 transition-colors`
+    px-3 py-2 text-sm text-ink-primary placeholder-ink-muted/40
+    focus:outline-none focus:border-accent-green/50 focus:ring-1 focus:ring-accent-green/20 transition-colors`
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
-      <div className="card w-[420px] shadow-panel animate-fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 backdrop-blur-sm">
+      <div className="card w-[440px] shadow-panel animate-fade-in">
+
+        {/* 顶部色条 */}
+        <div className="h-0.5 w-full bg-gradient-to-r from-accent-green/60 via-accent-cyan/40 to-transparent rounded-t-xl" />
+
         {/* 标题 */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-terminal-border">
           <div className="flex items-center gap-2">
-            <ScrollText size={14} className="text-accent-cyan" />
-            <span className="font-medium text-sm">记录交易</span>
+            <div className="w-7 h-7 rounded-lg bg-accent-green/10 border border-accent-green/30
+              flex items-center justify-center">
+              <ScrollText size={13} className="text-accent-green" />
+            </div>
+            <span className="font-semibold text-sm text-ink-primary">记录交易</span>
           </div>
-          <button onClick={onClose} className="text-ink-muted hover:text-ink-primary transition-colors">
-            <X size={14} />
+          <button onClick={onClose}
+            className="w-6 h-6 rounded flex items-center justify-center text-ink-muted
+              hover:text-ink-primary hover:bg-terminal-muted transition-colors">
+            <X size={13} />
           </button>
         </div>
 
         <div className="p-5 space-y-4">
-          {/* 股票代码 + 方向 */}
+          {/* 代码 + 方向 */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <LabelXs>股票代码 *</LabelXs>
-              <input
-                autoFocus type="text" maxLength={6} placeholder="如 600519"
+              <input autoFocus type="text" maxLength={6} placeholder="如 600519"
                 value={form.stock_code}
                 onChange={e => set('stock_code', e.target.value.replace(/\D/g, ''))}
-                className={inputCls + ' font-mono'}
-              />
+                className={inputCls + ' font-mono tracking-widest'} />
             </div>
             <div>
-              <LabelXs>方向 *</LabelXs>
-              <div className="flex gap-2 mt-1.5">
+              <LabelXs>交易方向 *</LabelXs>
+              <div className="flex gap-2 mt-1">
                 {(['BUY', 'SELL'] as const).map(a => (
-                  <button
-                    key={a}
-                    type="button"
-                    onClick={() => set('action', a)}
-                    className={`flex-1 py-1.5 rounded-md text-sm font-medium border transition-all ${
+                  <button key={a} type="button" onClick={() => set('action', a)}
+                    className={`flex-1 py-2 rounded-md text-xs font-semibold border transition-all ${
                       form.action === a
                         ? a === 'BUY'
-                          ? 'bg-accent-green/15 border-accent-green/40 text-accent-green'
-                          : 'bg-accent-red/15 border-accent-red/40 text-accent-red'
-                        : 'border-terminal-border text-ink-muted hover:border-terminal-muted'
-                    }`}
-                  >
-                    {a === 'BUY' ? '买入' : '卖出'}
+                          ? 'bg-accent-green/15 border-accent-green/50 text-accent-green'
+                          : 'bg-accent-red/15 border-accent-red/50 text-accent-red'
+                        : 'border-terminal-border text-ink-muted hover:border-ink-muted/40'
+                    }`}>
+                    {a === 'BUY' ? '▲ 买入' : '▼ 卖出'}
                   </button>
                 ))}
               </div>
@@ -179,69 +178,63 @@ function AddTradeDialog({ onClose, onSuccess }: { onClose: () => void; onSuccess
           {/* 价格 + 数量 */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <LabelXs>价格（元）*</LabelXs>
-              <input
-                type="number" step="0.01" min="0.01" placeholder="如 1800.00"
-                value={form.price}
-                onChange={e => set('price', e.target.value)}
-                className={inputCls + ' font-mono'}
-              />
+              <LabelXs>成交价格（元）*</LabelXs>
+              <input type="number" step="0.01" min="0.01" placeholder="如 12.50"
+                value={form.price} onChange={e => set('price', e.target.value)}
+                className={inputCls + ' font-mono'} />
             </div>
             <div>
-              <LabelXs>数量（手）*</LabelXs>
-              <input
-                type="number" step="1" min="1" placeholder="如 100"
-                value={form.volume}
-                onChange={e => set('volume', e.target.value)}
-                className={inputCls + ' font-mono'}
-              />
+              <LabelXs>成交数量（股）*</LabelXs>
+              <input type="number" step="100" min="1" placeholder="如 1000"
+                value={form.volume} onChange={e => set('volume', e.target.value)}
+                className={inputCls + ' font-mono'} />
             </div>
           </div>
 
           {/* 金额预览 */}
           {form.price && form.volume && parseFloat(form.price) > 0 && parseInt(form.volume) > 0 && (
-            <div className="px-3 py-2 rounded-md bg-terminal-muted border border-terminal-border text-xs font-mono text-ink-secondary">
-              交易金额预估：
-              <span className="text-ink-primary font-semibold ml-1">
+            <div className="flex items-center justify-between px-3 py-2 rounded-lg
+              bg-accent-green/5 border border-accent-green/20 text-xs font-mono">
+              <span className="text-ink-muted">交易金额</span>
+              <span className="text-accent-green font-semibold">
                 {formatAmount(parseFloat(form.price) * parseInt(form.volume, 10))}
               </span>
             </div>
           )}
 
-          {/* 交易日期 */}
+          {/* 日期 */}
           <div>
-            <LabelXs>交易日期（不填则为今日，补录历史可填）</LabelXs>
-            <input
-              type="date"
-              value={form.traded_at}
+            <LabelXs>交易日期（留空 = 今日）</LabelXs>
+            <input type="date" value={form.traded_at}
               onChange={e => set('traded_at', e.target.value)}
-              className={inputCls + ' font-mono'}
-            />
+              className={inputCls + ' font-mono'} />
           </div>
 
           {/* 理由 */}
           <div>
             <LabelXs>交易理由（可选）</LabelXs>
-            <input
-              type="text" maxLength={200} placeholder="如：回调至支撑位买入，均线金叉…"
-              value={form.reason}
-              onChange={e => set('reason', e.target.value)}
+            <input type="text" maxLength={200} placeholder="如：回调至支撑位，均线金叉…"
+              value={form.reason} onChange={e => set('reason', e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-              className={inputCls}
-            />
+              className={inputCls} />
           </div>
 
           {err && <ErrorBanner message={err} />}
         </div>
 
-        <div className="flex gap-3 px-5 pb-5">
-          <button type="button" onClick={onClose} className="btn-ghost flex-1 justify-center">取消</button>
-          <button
-            type="button" onClick={handleSubmit} disabled={loading}
-            className="btn-primary flex-1 justify-center disabled:opacity-50"
-          >
-            {loading ? <RefreshCw size={13} className="animate-spin" /> : <Plus size={13} />}
-            {loading ? '提交中…' : '记录'}
+        <div className="flex gap-2 px-5 pb-5">
+          <button type="button" onClick={onClose} className="btn-ghost flex-1 justify-center">
+            取消
+          </button>
+          <button type="button" onClick={handleSubmit} disabled={loading}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold
+              bg-accent-green/15 border border-accent-green/40 text-accent-green
+              hover:bg-accent-green/25 hover:border-accent-green/60
+              disabled:opacity-40 disabled:cursor-not-allowed transition-all">
+            {loading
+              ? <><RefreshCw size={12} className="animate-spin" /> 提交中…</>
+              : <><Plus size={12} /> 确认记录</>
+            }
           </button>
         </div>
       </div>
@@ -250,14 +243,15 @@ function AddTradeDialog({ onClose, onSuccess }: { onClose: () => void; onSuccess
 }
 
 // ═══════════════════════════════════════════════════════════════
-// 盈亏报告面板
+// 盈亏概览
 // ═══════════════════════════════════════════════════════════════
-function PerformancePanel({ onRefresh }: { onRefresh?: () => void }) {
+function PerformancePanel({ refreshKey, onDataLoad }: {
+  refreshKey: number
+  onDataLoad?: () => void
+}) {
   const { data, loading, error, refetch } = useQuery(
-    useCallback(() => fetchPerformance(), []),
+    useCallback(() => fetchPerformance(), [refreshKey]), // eslint-disable-line react-hooks/exhaustive-deps
   )
-
-  const refresh = () => { refetch(); onRefresh?.() }
 
   if (loading && !data) {
     return (
@@ -270,102 +264,89 @@ function PerformancePanel({ onRefresh }: { onRefresh?: () => void }) {
     )
   }
   if (error) return <ErrorBanner message={error} />
-  if (!data)  return null
+  if (!data) return null
 
   const r = data
-
-  // 过滤出有持仓的
-  const holding = r.positions.filter(p => p.hold_volume > 0)
-  // 有已实现盈亏的
+  const holding      = r.positions.filter(p => p.hold_volume > 0)
   const withRealized = r.positions.filter(p => p.realized_pnl !== 0)
+  onDataLoad?.()
 
   return (
-    <div className="space-y-4">
-      {/* ── 顶部汇总卡 ── */}
+    <div className="space-y-3">
+      {/* 汇总卡 */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
-          { label: '总盈亏',    value: r.total_pnl,             icon: Activity,   neutral: false },
-          { label: '已实现盈亏', value: r.total_realized_pnl,   icon: DollarSign, neutral: false },
-          { label: '浮动盈亏',  value: r.total_unrealized_pnl,  icon: TrendingUp, neutral: false },
-          { label: '交易笔数',  value: r.total_trades,          icon: ScrollText, neutral: true,  raw: true },
-        ].map(({ label, value, icon: Icon, neutral, raw }) => (
-          <div key={label} className="card p-4 flex items-start justify-between animate-fade-in">
+          { label: '总盈亏',     value: r.total_pnl,             icon: Activity,   raw: false },
+          { label: '已实现盈亏', value: r.total_realized_pnl,    icon: DollarSign, raw: false },
+          { label: '浮动盈亏',   value: r.total_unrealized_pnl,  icon: TrendingUp, raw: false },
+          { label: '交易笔数',   value: r.total_trades,          icon: ScrollText, raw: true  },
+        ].map(({ label, value, icon: Icon, raw }) => (
+          <div key={label} className="card p-4 flex items-start justify-between">
             <div>
               <p className="text-[10px] font-mono text-ink-muted uppercase tracking-wider mb-1">{label}</p>
-              <p className={`text-xl font-mono font-bold ${neutral ? 'text-ink-primary' : pnlColor(value as number)}`}>
-                {raw
-                  ? String(value)
-                  : `${neutral ? '' : pnlSign(value as number)}${formatAmount(Math.abs(value as number))}`
-                }
+              <p className={`text-xl font-mono font-bold ${raw ? 'text-ink-primary' : pnlColor(value as number)}`}>
+                {raw ? String(value) : `${pnlSign(value as number)}${formatAmount(Math.abs(value as number))}`}
               </p>
             </div>
-            <div className={`w-8 h-8 rounded-lg bg-terminal-muted border border-terminal-border flex items-center justify-center ${neutral ? 'text-ink-muted' : pnlColor(value as number)}`}>
+            <div className={`w-8 h-8 rounded-lg bg-terminal-muted border border-terminal-border
+              flex items-center justify-center ${raw ? 'text-ink-muted' : pnlColor(value as number)}`}>
               <Icon size={14} strokeWidth={1.8} />
             </div>
           </div>
         ))}
       </div>
 
-      {/* 胜率 / 股票数 */}
+      {/* 胜率 */}
       {r.positions.length > 0 && (
-        <div className="flex items-center gap-4 px-1">
-          <div className="flex items-center gap-1.5 text-xs font-mono text-ink-muted">
-            <Trophy size={11} className="text-accent-amber" />
-            盈利 <span className="text-accent-green font-medium">{r.win_positions}</span> 只 ·
-            亏损 <span className="text-accent-red font-medium">{r.lose_positions}</span> 只 ·
-            共 {r.positions.length} 只
-          </div>
-          <span className="text-ink-muted text-[10px] font-mono ml-auto">{r.note}</span>
-          <button
-            onClick={refresh}
-            className="text-xs font-mono text-ink-muted hover:text-accent-cyan transition-colors flex items-center gap-1"
-          >
-            <RefreshCw size={10} />
-            刷新
+        <div className="flex items-center gap-3 px-1 text-xs font-mono text-ink-muted">
+          <Trophy size={11} className="text-accent-amber flex-shrink-0" />
+          盈利 <span className="text-accent-green font-medium">{r.win_positions}</span> 只 ·
+          亏损 <span className="text-accent-red font-medium">{r.lose_positions}</span> 只 ·
+          共 {r.positions.length} 只
+          <span className="ml-auto text-[10px] opacity-60">{r.note}</span>
+          <button onClick={refetch}
+            className="flex items-center gap-1 text-ink-muted hover:text-accent-cyan transition-colors">
+            <RefreshCw size={10} /> 刷新
           </button>
         </div>
       )}
 
-      {/* ── 持仓明细表 ── */}
+      {/* 持仓表 */}
       {holding.length > 0 && (
         <div className="card overflow-hidden">
           <div className="flex items-center gap-2 px-5 py-3 border-b border-terminal-border">
             <TrendingUp size={13} className="text-accent-green" />
-            <span className="text-sm font-medium">当前持仓</span>
-            <span className="tag">{holding.length} 只</span>
+            <span className="text-sm font-medium text-ink-primary">当前持仓</span>
+            <span className="tag text-ink-muted">{holding.length} 只</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm min-w-[680px]">
               <thead>
                 <tr className="border-b border-terminal-border">
-                  {['代码', '持仓(手)', '成本均价', '现价', '总成本', '浮动盈亏', '浮动比例'].map(h => (
-                    <th key={h} className="px-4 py-2.5 text-left text-[11px] font-mono text-ink-muted uppercase tracking-wider">
-                      {h}
-                    </th>
+                  {['代码', '持仓(股)', '成本均价', '现价', '总成本', '浮动盈亏', '浮动比例'].map(h => (
+                    <th key={h} className="px-4 py-2.5 text-left text-[11px] font-mono text-ink-muted uppercase tracking-wider">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {holding.map(pos => (
                   <tr key={pos.stock_code} className="data-row">
-                    <td className="px-4 py-3 font-mono text-xs text-ink-secondary">{pos.stock_code}</td>
+                    <td className="px-4 py-3 font-mono text-xs font-semibold text-ink-secondary">{pos.stock_code}</td>
                     <td className="px-4 py-3 font-mono">{pos.hold_volume.toLocaleString()}</td>
-                    <td className="px-4 py-3 font-mono text-ink-secondary">{pos.avg_cost_price.toFixed(4)}</td>
-                    <td className="px-4 py-3 font-mono">
+                    <td className="px-4 py-3 font-mono text-ink-primary">{pos.hold_volume.toLocaleString()}</td>
+                    <td className="px-4 py-3 font-mono text-ink-primary">
                       {pos.current_price > 0 ? pos.current_price.toFixed(2) : <span className="text-ink-muted">—</span>}
                     </td>
                     <td className="px-4 py-3 font-mono text-ink-secondary">{formatAmount(pos.total_cost)}</td>
                     <td className={`px-4 py-3 font-mono font-semibold ${pnlColor(pos.unrealized_pnl)}`}>
                       {pos.current_price > 0
                         ? `${pnlSign(pos.unrealized_pnl)}${formatAmount(Math.abs(pos.unrealized_pnl))}`
-                        : <span className="text-ink-muted">—</span>
-                      }
+                        : <span className="text-ink-muted">—</span>}
                     </td>
-                    <td className={`px-4 py-3 font-mono text-sm ${pnlColor(pos.unrealized_pct)}`}>
+                    <td className={`px-4 py-3 font-mono ${pnlColor(pos.unrealized_pct)}`}>
                       {pos.current_price > 0
                         ? `${pnlSign(pos.unrealized_pct)}${pos.unrealized_pct.toFixed(2)}%`
-                        : <span className="text-ink-muted">—</span>
-                      }
+                        : <span className="text-ink-muted">—</span>}
                     </td>
                   </tr>
                 ))}
@@ -375,34 +356,32 @@ function PerformancePanel({ onRefresh }: { onRefresh?: () => void }) {
         </div>
       )}
 
-      {/* ── 已实现盈亏明细 ── */}
+      {/* 已实现盈亏 */}
       {withRealized.length > 0 && (
         <div className="card overflow-hidden">
           <div className="flex items-center gap-2 px-5 py-3 border-b border-terminal-border">
             <DollarSign size={13} className="text-accent-amber" />
-            <span className="text-sm font-medium">已实现盈亏明细</span>
-            <span className="tag">{withRealized.length} 只</span>
+            <span className="text-sm font-medium text-ink-primary">已实现盈亏</span>
+            <span className="tag text-ink-muted">{withRealized.length} 只</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-terminal-border">
                   {['代码', '当前持仓', '持仓均价', '总成本', '已实现盈亏', '平仓次数'].map(h => (
-                    <th key={h} className="px-4 py-2.5 text-left text-[11px] font-mono text-ink-muted uppercase tracking-wider">
-                      {h}
-                    </th>
+                    <th key={h} className="px-4 py-2.5 text-left text-[11px] font-mono text-ink-muted uppercase tracking-wider">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {withRealized.map(pos => (
                   <tr key={pos.stock_code} className="data-row">
-                    <td className="px-4 py-3 font-mono text-xs text-ink-secondary">{pos.stock_code}</td>
+                    <td className="px-4 py-3 font-mono text-xs font-semibold text-ink-secondary">{pos.stock_code}</td>
                     <td className="px-4 py-3 font-mono text-ink-secondary">
                       {pos.hold_volume > 0 ? pos.hold_volume.toLocaleString() : <span className="text-ink-muted">已清仓</span>}
                     </td>
                     <td className="px-4 py-3 font-mono text-ink-secondary">
-                      {pos.hold_volume > 0 ? pos.avg_cost_price.toFixed(4) : '—'}
+                      {pos.hold_volume > 0 ? pos.avg_cost_price.toFixed(3) : '—'}
                     </td>
                     <td className="px-4 py-3 font-mono text-ink-secondary">
                       {pos.hold_volume > 0 ? formatAmount(pos.total_cost) : '—'}
@@ -420,106 +399,182 @@ function PerformancePanel({ onRefresh }: { onRefresh?: () => void }) {
       )}
 
       {r.positions.length === 0 && (
-        <EmptyState message="暂无交易数据，点击右上角「记录交易」开始" />
+        <EmptyState message="暂无持仓数据，点击右上角「记录交易」开始" />
       )}
     </div>
   )
 }
 
 // ═══════════════════════════════════════════════════════════════
-// 交易历史查询（按股票代码）
+// 全量交易流水（默认展示，支持按代码筛选）
 // ═══════════════════════════════════════════════════════════════
-function TradeDetailTable() {
+function TradeHistory({ refreshKey }: { refreshKey: number }) {
   const navigate = useNavigate()
-  const [code, setCode] = useState('')
-  const [query, setQuery] = useState('')
+  const [filter, setFilter] = useState('')        // 输入框实时值
+  const [actionFilter, setActionFilter] = useState<'ALL' | 'BUY' | 'SELL'>('ALL')
 
   const { data, loading, error } = useQuery(
-    useCallback(() => (query ? fetchAllTrades(query) : Promise.resolve(null as any)), [query]),
-    { enabled: !!query },
+    useCallback(() => fetchAllTrades(500), [refreshKey]), // eslint-disable-line react-hooks/exhaustive-deps
   )
 
-  const items: TradeLogVO[] = data?.items ?? []
+  const allItems: TradeLogVO[] = data?.items ?? []
+
+  // 前端过滤（不需要额外请求）
+  const filtered = useMemo(() => {
+    let list = allItems
+    if (filter.trim()) {
+      list = list.filter(i => i.stock_code.includes(filter.trim().toUpperCase()))
+    }
+    if (actionFilter !== 'ALL') {
+      list = list.filter(i => i.action === actionFilter)
+    }
+    return list
+  }, [allItems, filter, actionFilter])
+
+  // 从全量记录提取去重的股票代码，供快速导航
+  const codes = useMemo(() =>
+    [...new Set(allItems.map(i => i.stock_code))].sort(),
+    [allItems],
+  )
 
   return (
     <div className="card overflow-hidden">
-      <div className="flex items-center gap-3 px-5 py-3 border-b border-terminal-border">
-        <BarChart2 size={13} className="text-ink-secondary" />
-        <span className="text-sm font-medium">按股票查交易历史</span>
+      {/* 标题 + 过滤栏 */}
+      <div className="flex items-center gap-3 px-5 py-3 border-b border-terminal-border flex-wrap">
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <BarChart2 size={13} className="text-ink-secondary" />
+          <span className="text-sm font-medium text-ink-primary">交易流水</span>
+          {data && (
+            <span className="tag text-ink-muted">{filtered.length} / {allItems.length} 条</span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 ml-auto flex-wrap">
+          {/* 买卖筛选 */}
+          <div className="flex rounded-lg border border-terminal-border overflow-hidden text-[11px] font-mono">
+            {(['ALL', 'BUY', 'SELL'] as const).map(a => (
+              <button key={a} onClick={() => setActionFilter(a)}
+                className={`px-2.5 py-1.5 transition-colors ${
+                  actionFilter === a
+                    ? a === 'BUY' ? 'bg-accent-green/15 text-accent-green'
+                      : a === 'SELL' ? 'bg-accent-red/15 text-accent-red'
+                      : 'bg-terminal-muted text-ink-primary'
+                    : 'text-ink-muted hover:text-ink-secondary'
+                }`}>
+                {a === 'ALL' ? '全部' : a === 'BUY' ? '▲ 买入' : '▼ 卖出'}
+              </button>
+            ))}
+          </div>
+
+          {/* 代码搜索框 */}
+          <div className="relative">
+            <Search size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted pointer-events-none" />
+            <input
+              type="text" maxLength={6} placeholder="代码筛选…"
+              value={filter}
+              onChange={e => setFilter(e.target.value.replace(/\D/g, ''))}
+              className="pl-7 pr-3 py-1.5 w-28 bg-terminal-muted border border-terminal-border rounded-lg
+                text-xs font-mono text-ink-primary placeholder-ink-muted/40
+                focus:outline-none focus:border-accent-green/40 transition-colors"
+            />
+            {filter && (
+              <button onClick={() => setFilter('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-muted hover:text-ink-primary">
+                <X size={10} />
+              </button>
+            )}
+          </div>
+
+          {/* 筛选出结果时显示跳转K线按钮 */}
+          {filter.length === 6 && (
+            <button onClick={() => navigate(`/stocks/${filter.toUpperCase()}`)}
+              className="btn-ghost text-accent-cyan text-[11px]">
+              K线图
+            </button>
+          )}
+        </div>
       </div>
 
-      <div className="p-4 flex gap-2">
-        <input
-          type="text" maxLength={6} placeholder="输入 6 位股票代码，按 Enter 查询"
-          value={code}
-          onChange={e => setCode(e.target.value.replace(/\D/g, ''))}
-          onKeyDown={e => e.key === 'Enter' && code.length === 6 && setQuery(code)}
-          className="flex-1 bg-terminal-muted border border-terminal-border rounded-md px-3 py-2 text-sm font-mono text-ink-primary placeholder-ink-muted focus:outline-none focus:border-accent-blue transition-colors"
-        />
-        <button
-          onClick={() => setQuery(code)}
-          disabled={code.length !== 6 || loading}
-          className="btn-ghost disabled:opacity-40"
-        >
-          {loading ? <RefreshCw size={13} className="animate-spin" /> : '查询'}
-        </button>
-        {query && (
-          <button
-            onClick={() => navigate(`/stocks/${query}`)}
-            className="btn-ghost text-accent-cyan"
-          >
-            K线图
-          </button>
-        )}
-      </div>
-
-      {error && <div className="px-4 pb-3"><ErrorBanner message={error} /></div>}
-
-      {query && (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[600px]">
-            <thead>
-              <tr className="border-b border-terminal-border">
-                {['日期', '方向', '价格', '数量(手)', '交易金额', '交易理由'].map(h => (
-                  <th key={h} className="px-4 py-2.5 text-left text-[11px] font-mono text-ink-muted uppercase tracking-wider">
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {loading
-                ? Array.from({ length: 3 }).map((_, i) => <SkeletonRow key={i} cols={6} />)
-                : items.length === 0
-                  ? <tr><td colSpan={6}><EmptyState message={`${query} 暂无交易记录`} /></td></tr>
-                  : items.map(item => (
-                      <tr key={item.id} className="data-row">
-                        <td className="px-4 py-3 font-mono text-xs text-ink-muted">
-                          {new Date(item.traded_at).toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono font-medium border ${
-                            item.action === 'BUY'
-                              ? 'bg-accent-green/10 border-accent-green/30 text-accent-green'
-                              : 'bg-accent-red/10 border-accent-red/30 text-accent-red'
-                          }`}>
-                            {item.action === 'BUY' ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
-                            {item.action === 'BUY' ? '买入' : '卖出'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 font-mono">{item.price.toFixed(2)}</td>
-                        <td className="px-4 py-3 font-mono">{item.volume.toLocaleString()}</td>
-                        <td className="px-4 py-3 font-mono text-ink-secondary">{formatAmount(item.amount)}</td>
-                        <td className="px-4 py-3 text-ink-muted text-xs max-w-[200px] truncate">
-                          {item.reason || <span className="opacity-30">—</span>}
-                        </td>
-                      </tr>
-                    ))
-              }
-            </tbody>
-          </table>
+      {/* 快速标签（股票代码云） */}
+      {codes.length > 0 && !filter && (
+        <div className="px-5 py-2 border-b border-terminal-border flex items-center gap-1.5 flex-wrap">
+          <Filter size={10} className="text-ink-muted flex-shrink-0" />
+          {codes.map(code => (
+            <button key={code} onClick={() => setFilter(code)}
+              className="px-2 py-0.5 text-[10px] font-mono rounded border
+                border-terminal-border text-ink-muted hover:text-ink-primary
+                hover:border-accent-green/30 transition-colors">
+              {code}
+            </button>
+          ))}
         </div>
       )}
+
+      {error && <div className="px-5 py-3"><ErrorBanner message={error} /></div>}
+
+      {/* 表格 */}
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm min-w-[620px]">
+          <thead>
+            <tr className="border-b border-terminal-border">
+              {['日期', '代码', '方向', '价格', '数量', '金额', '备注'].map(h => (
+                <th key={h} className="px-4 py-2.5 text-left text-[11px] font-mono text-ink-muted uppercase tracking-wider">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {loading
+              ? Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} cols={7} />)
+              : filtered.length === 0
+                ? (
+                  <tr>
+                    <td colSpan={7}>
+                      <EmptyState message={
+                        allItems.length === 0
+                          ? '暂无交易记录，点击右上角「记录交易」开始'
+                          : `没有找到 ${filter} 的交易记录`
+                      } />
+                    </td>
+                  </tr>
+                )
+                : filtered.map(item => (
+                    <tr key={item.id} className="data-row group">
+                      <td className="px-4 py-3 font-mono text-xs text-ink-muted whitespace-nowrap">
+                        {fDate(item.traded_at)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={() => navigate(`/stocks/${item.stock_code}`)}
+                          className="font-mono text-xs font-semibold text-ink-secondary
+                            hover:text-accent-cyan transition-colors underline-offset-2 hover:underline">
+                          {item.stock_code}
+                        </button>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px]
+                          font-mono font-semibold border ${
+                          item.action === 'BUY'
+                            ? 'bg-accent-green/10 border-accent-green/30 text-accent-green'
+                            : 'bg-accent-red/10 border-accent-red/30 text-accent-red'
+                        }`}>
+                          {item.action === 'BUY'
+                            ? <><TrendingUp size={9} /> 买入</>
+                            : <><TrendingDown size={9} /> 卖出</>
+                          }
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 font-mono text-xs text-ink-primary">{item.price.toFixed(2)}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-ink-primary">{item.volume.toLocaleString()}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-ink-secondary">{formatAmount(item.amount)}</td>
+                      <td className="px-4 py-3 text-ink-muted text-xs max-w-[180px] truncate">
+                        {item.reason || <span className="opacity-30">—</span>}
+                      </td>
+                    </tr>
+                  ))
+            }
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
@@ -529,36 +584,31 @@ function TradeDetailTable() {
 // ═══════════════════════════════════════════════════════════════
 export default function TradeLogs() {
   const [showAdd, setShowAdd] = useState(false)
-  const [perfKey, setPerfKey] = useState(0)
+  const [refreshKey, setRefreshKey] = useState(0)
+  const refresh = () => setRefreshKey(k => k + 1)
 
   return (
     <div className="flex flex-col h-full">
       <Topbar
         title="交易日志"
         subtitle="FIFO 成本法 · 实时浮动盈亏"
-      />
-
-      <div className="flex-1 overflow-y-auto p-5 space-y-5">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-ink-primary">盈亏总览</h2>
+        actions={
           <button onClick={() => setShowAdd(true)} className="btn-primary">
             <Plus size={13} />
             记录交易
           </button>
-        </div>
+        }
+      />
 
-        {/* key 变化会触发重新 fetch */}
-        <div key={perfKey}>
-          <PerformancePanel onRefresh={() => setPerfKey(k => k + 1)} />
-        </div>
-
-        <TradeDetailTable />
+      <div className="flex-1 overflow-y-auto p-5 space-y-4">
+        <PerformancePanel refreshKey={refreshKey} />
+        <TradeHistory refreshKey={refreshKey} />
       </div>
 
       {showAdd && (
         <AddTradeDialog
           onClose={() => setShowAdd(false)}
-          onSuccess={() => setPerfKey(k => k + 1)}
+          onSuccess={refresh}
         />
       )}
     </div>

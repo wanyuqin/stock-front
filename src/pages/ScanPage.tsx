@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import Topbar from '@/components/Topbar'
 import { useQuery } from '@/hooks/useQuery'
-import { formatAmount, EmptyState, ErrorBanner } from '@/components/shared'
+import { EmptyState, ErrorBanner } from '@/components/shared'
 import http from '@/api/http'
 import type { ApiResponse } from '@/types'
 
@@ -48,6 +48,9 @@ interface DailyScan {
 }
 
 // ── API 函数 ──────────────────────────────────────────────────
+// axios 拦截器返回整个 AxiosResponse，
+// resp.data       = { code, message, data: T }   ← 后端统一包装层
+// resp.data.data  = T                             ← 真正的业务数据
 const runScan = () =>
   http.post<ApiResponse<ScanResult>>('/admin/scan/run', {})
 
@@ -107,7 +110,7 @@ function ScanTable({ items, loading }: ScanTableProps) {
     )
   }
 
-  if (items.length === 0) {
+  if (!items || items.length === 0) {
     return <EmptyState message="暂无扫描命中记录" />
   }
 
@@ -178,8 +181,13 @@ function RunScanPanel({ onDone }: { onDone: () => void }) {
     setResult(null)
     try {
       const resp = await runScan()
-      setResult(resp.data)
-      onDone() // 通知父组件刷新今日结果
+      // resp.data       = { code, message, data: ScanResult }  ← axios 包装层
+      // resp.data.data  = ScanResult                           ← 真正的业务数据
+      const scanResult = resp.data.data
+      // items 防空：后端无命中时可能返回 null
+      if (scanResult.items == null) scanResult.items = []
+      setResult(scanResult)
+      onDone()
     } catch (e) {
       setErr(e instanceof Error ? e.message : '扫描失败')
     } finally {
@@ -236,10 +244,10 @@ function RunScanPanel({ onDone }: { onDone: () => void }) {
             {/* 统计卡 */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {[
-                { label: '扫描股票',  value: result.total,       icon: ScanLine,      color: 'text-ink-primary' },
-                { label: '命中信号',  value: result.hit_count,   icon: CheckCircle2,  color: 'text-accent-green' },
-                { label: '数据不足',  value: result.skipped,     icon: Clock,         color: 'text-ink-muted' },
-                { label: '获取失败',  value: result.errors,      icon: AlertCircle,   color: result.errors > 0 ? 'text-accent-red' : 'text-ink-muted' },
+                { label: '扫描股票', value: result.total,     icon: ScanLine,     color: 'text-ink-primary'  },
+                { label: '命中信号', value: result.hit_count, icon: CheckCircle2, color: 'text-accent-green' },
+                { label: '数据不足', value: result.skipped,   icon: Clock,        color: 'text-ink-muted'    },
+                { label: '获取失败', value: result.errors,    icon: AlertCircle,  color: result.errors > 0 ? 'text-accent-red' : 'text-ink-muted' },
               ].map(({ label, value, icon: Icon, color }) => (
                 <div key={label} className="bg-terminal-muted rounded-lg p-3 border border-terminal-border">
                   <div className="flex items-center gap-1.5 mb-1">
@@ -258,7 +266,7 @@ function RunScanPanel({ onDone }: { onDone: () => void }) {
             </p>
 
             {/* 命中明细 */}
-            {result.items.length > 0 && (
+            {result.items.length > 0 ? (
               <div>
                 <p className="text-xs font-mono text-ink-secondary mb-2 flex items-center gap-1.5">
                   <Zap size={11} className="text-accent-amber" />
@@ -266,8 +274,7 @@ function RunScanPanel({ onDone }: { onDone: () => void }) {
                 </p>
                 <ScanTable items={result.items} />
               </div>
-            )}
-            {result.items.length === 0 && (
+            ) : (
               <EmptyState message="本次扫描无股票触发信号" />
             )}
           </div>
@@ -281,7 +288,7 @@ function RunScanPanel({ onDone }: { onDone: () => void }) {
 // 今日扫描历史（从 DB 读已持久化的记录）
 // ══════════════════════════════════════════════════════════════
 function TodayScanPanel({ refreshKey }: { refreshKey: number }) {
-  const [histDate, setHistDate] = useState('')
+  const [histDate, setHistDate]   = useState('')
   const [queryDate, setQueryDate] = useState('')
 
   const { data: todayData, loading: todayLoading, error: todayErr, refetch } = useQuery(
@@ -296,10 +303,10 @@ function TodayScanPanel({ refreshKey }: { refreshKey: number }) {
     { enabled: !!queryDate },
   )
 
-  const displayData   = queryDate ? histData   : todayData
+  const displayData    = queryDate ? histData    : todayData
   const displayLoading = queryDate ? histLoading : todayLoading
-  const displayErr    = queryDate ? histErr    : todayErr
-  const items         = displayData?.items ?? []
+  const displayErr     = queryDate ? histErr     : todayErr
+  const items          = displayData?.items ?? []
 
   return (
     <div className="card overflow-hidden">
@@ -312,7 +319,6 @@ function TodayScanPanel({ refreshKey }: { refreshKey: number }) {
           )}
         </div>
 
-        {/* 历史日期查询 */}
         <div className="flex items-center gap-2">
           <input
             type="date"
@@ -324,13 +330,21 @@ function TodayScanPanel({ refreshKey }: { refreshKey: number }) {
             onClick={() => setQueryDate(histDate)}
             disabled={!histDate}
             className="btn-ghost text-xs disabled:opacity-40"
-          >查历史</button>
+          >
+            查历史
+          </button>
           {queryDate && (
-            <button onClick={() => { setQueryDate(''); setHistDate('') }} className="btn-ghost text-xs text-ink-muted">
+            <button
+              onClick={() => { setQueryDate(''); setHistDate('') }}
+              className="btn-ghost text-xs text-ink-muted"
+            >
               回今日
             </button>
           )}
-          <button onClick={refetch} className="w-6 h-6 flex items-center justify-center text-ink-muted hover:text-accent-cyan transition-colors">
+          <button
+            onClick={refetch}
+            className="w-6 h-6 flex items-center justify-center text-ink-muted hover:text-accent-cyan transition-colors"
+          >
             <RefreshCw size={12} className={todayLoading ? 'animate-spin' : ''} />
           </button>
         </div>
@@ -355,12 +369,8 @@ export default function ScanPage() {
         title="信号扫描"
         subtitle="量能 · 均线突破 · 大涨检测"
       />
-
       <div className="flex-1 overflow-y-auto p-5 space-y-5">
-        {/* 触发扫描 */}
         <RunScanPanel onDone={() => setRefreshKey(k => k + 1)} />
-
-        {/* 今日 / 历史记录 */}
         <TodayScanPanel refreshKey={refreshKey} />
       </div>
     </div>

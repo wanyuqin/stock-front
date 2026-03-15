@@ -12,12 +12,13 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      // 所有 /api 开头的请求都转发到后端 :8888
-      // 前端 baseURL = '/api/v1' → 实际请求 http://localhost:8888/api/v1/...
       '/api': {
         target: 'http://localhost:8888',
         changeOrigin: true,
-        // 不重写路径：/api/v1/stocks → http://localhost:8888/api/v1/stocks ✓
+        // 放大 proxy 超时至 3 分钟，与 AI_TIMEOUT 对齐
+        // 否则 Vite dev server 会在大模型返回前提前断开连接
+        timeout: 180_000,
+        proxyTimeout: 180_000,
       },
     },
   },

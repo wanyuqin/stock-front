@@ -6,9 +6,11 @@ interface TopbarProps {
   subtitle?: string
   onRefresh?: () => void
   loading?: boolean
+  /** 插入在右侧工具栏左边的自定义操作按钮区域 */
+  actions?: React.ReactNode
 }
 
-export default function Topbar({ title, subtitle, onRefresh, loading }: TopbarProps) {
+export default function Topbar({ title, subtitle, onRefresh, loading, actions }: TopbarProps) {
   const [isOnline] = useState(navigator.onLine)
 
   const now = new Date()
@@ -43,8 +45,17 @@ export default function Topbar({ title, subtitle, onRefresh, loading }: TopbarPr
         </div>
       </div>
 
-      {/* 右侧：工具栏 */}
+      {/* 右侧：自定义操作 + 工具栏 */}
       <div className="flex items-center gap-2">
+
+        {/* 自定义操作区 */}
+        {actions && (
+          <>
+            {actions}
+            <div className="w-px h-4 bg-terminal-border mx-1" />
+          </>
+        )}
+
         {/* 时间显示 */}
         <div className="hidden sm:flex flex-col items-end mr-2">
           <span className="text-xs font-mono text-ink-primary tabular-nums">
@@ -59,10 +70,7 @@ export default function Topbar({ title, subtitle, onRefresh, loading }: TopbarPr
         <div className={`w-7 h-7 rounded-md flex items-center justify-center
           ${isOnline ? 'text-accent-green' : 'text-accent-red'}
         `}>
-          {isOnline
-            ? <Wifi size={13} />
-            : <WifiOff size={13} />
-          }
+          {isOnline ? <Wifi size={13} /> : <WifiOff size={13} />}
         </div>
 
         {/* 搜索 */}
@@ -98,10 +106,7 @@ export default function Topbar({ title, subtitle, onRefresh, loading }: TopbarPr
               transition-all duration-150 disabled:opacity-40
             "
           >
-            <RefreshCw
-              size={13}
-              className={loading ? 'animate-spin' : ''}
-            />
+            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
           </button>
         )}
       </div>

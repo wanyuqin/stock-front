@@ -1,8 +1,12 @@
-import http from './http'
+import http, { AI_TIMEOUT } from './http'
 import type {
   ApiResponse, ListResponse,
   Quote, Stock, WatchlistItem,
   KLineResponse, AnalysisResult,
+  Alert, MoneyFlowLog,
+  ScreenerResult, ScreenerStatus,
+  DiagnoseResponse, PositionDetail, SyncPositionRequest,
+  PositionAIResult,
 } from '@/types'
 
 // ── 股票 ──────────────────────────────────────────────────────────
@@ -16,13 +20,13 @@ export const fetchStockByCode = (code: string) =>
 export const fetchQuote = (code: string) =>
   http.get<ApiResponse<Quote>>(`/stocks/${code}/quote`)
 
-/** 获取日 K 线数据（前复权）*/
 export const fetchKLine = (code: string, limit = 120) =>
   http.get<ApiResponse<KLineResponse>>(`/stocks/${code}/kline`, { params: { limit } })
 
-/** 获取 AI 分析报告（30 分钟缓存）*/
 export const fetchAnalysis = (code: string) =>
-  http.get<ApiResponse<AnalysisResult>>(`/stocks/${code}/analysis`)
+  http.get<ApiResponse<AnalysisResult>>(`/stocks/${code}/analysis`, {
+    timeout: AI_TIMEOUT,
+  })
 
 // ── 自选股 ────────────────────────────────────────────────────────
 
@@ -34,6 +38,11 @@ export const addToWatchlist = (stockCode: string, note = '') =>
 
 export const removeFromWatchlist = (code: string) =>
   http.delete<ApiResponse<{ removed: string }>>(`/watchlist/${code}`)
+
+// ── 交易日志 ──────────────────────────────────────────────────────
+
+export const addTrade = (body: import('@/types').AddTradeRequest) =>
+  http.post<ApiResponse<import('@/types').TradeLog>>('/trades', body)
 
 // ── 每日复盘简报 ──────────────────────────────────────────────────
 
@@ -52,19 +61,14 @@ export interface DailyScanItem {
 
 export interface DailyReportDTO {
   date:         string
-  content:      string      // Markdown 全文
-  market_mood:  string      // 贪婪 / 中性 / 恐惧
+  content:      string
+  market_mood:  string
   scan_count:   number
   scans:        DailyScanItem[]
   from_cache:   boolean
   generated_at: string
 }
 
-/**
- * 获取每日复盘简报。
- * @param date       日期 YYYY-MM-DD，不传默认今日
- * @param force      true = 忽略缓存强制重新生成（仅今日有效）
- */
 export const fetchDailyReport = (date?: string, force = false) => {
   const params: Record<string, string> = {}
   if (date)  params.date  = date
@@ -72,6 +76,84 @@ export const fetchDailyReport = (date?: string, force = false) => {
   return http.get<ApiResponse<DailyReportDTO>>('/reports/daily', { params })
 }
 
-/** 手动触发生成今日复盘简报（POST）*/
 export const generateDailyReport = () =>
-  http.post<ApiResponse<DailyReportDTO>>('/reports/daily/generate', {})
+  http.post<ApiResponse<DailyReportDTO>>('/reports/daily/generate', {}, {
+    timeout: AI_TIMEOUT,
+  })
+
+// ── 异动告警 ──────────────────────────────────────────────────────
+
+export const fetchAlerts = (limit = 50, unreadOnly = false) =>
+  http.get<ApiResponse<{ count: number; items: Alert[] }>>('/alerts', {
+    params: { limit, unread_only: unreadOnly ? 'true' : 'false' },
+  })
+
+export const markAlertsRead = (ids: number[]) =>
+  http.post<ApiResponse<{ marked: number }>>('/alerts/read', { ids })
+
+// ── 资金流向 ──────────────────────────────────────────────────────
+
+export const fetchMoneyFlow = (code: string, limit = 20) =>
+  http.get<ApiResponse<{ code: string; count: number; items: MoneyFlowLog[] }>>(
+    `/stocks/${code}/money-flow`,
+    { params: { limit } },
+  )
+
+export const refreshMoneyFlow = (code: string) =>
+  http.post<ApiResponse<Record<string, string | number>>>(
+    `/stocks/${code}/money-flow/refresh`,
+    {},
+  )
+
+// ── 量化筛选器 ────────────────────────────────────────────────────
+
+export interface ScreenerExecuteRequest {
+  min_score?: number
+  limit?:     number
+  date?:      string
+}
+
+/** syncMarketData 返回体 */
+export interface SyncResult {
+  synced:      number
+  non_trading: boolean   // true = 非交易时段，空数据，不是错误
+  notice:      string    // 非交易时段时的友好提示文字
+}
+
+export const executeScreener = (req: ScreenerExecuteRequest = {}) =>
+  http.post<ApiResponse<ScreenerResult>>('/screener/execute', req)
+
+export const syncMarketData = () =>
+  http.post<ApiResponse<SyncResult>>('/screener/sync', {}, {
+    timeout: AI_TIMEOUT,
+  })
+
+export const fetchScreenerStatus = () =>
+  http.get<ApiResponse<ScreenerStatus>>('/screener/status')
+
+// ── 持仓守护 ─────────────────────────────────────────────────────
+
+export const fetchPositionDiagnosis = () =>
+  http.get<ApiResponse<DiagnoseResponse>>('/positions/diagnose')
+
+export const analyzePosition = (code: string) =>
+  http.post<ApiResponse<PositionAIResult>>(`/positions/analyze/${code}`, {}, {
+    timeout: AI_TIMEOUT,
+  })
+
+export const syncPosition = (req: SyncPositionRequest) =>
+  http.post<ApiResponse<PositionDetail>>('/positions/sync', req)
+
+// ── 全市场宏观监控 ────────────────────────────────────────────────
+
+export interface MarketSummary {
+  sentiment_score: number
+  total_amount: number
+  alert_status: 'SAFE' | 'WARNING' | 'DANGER'
+  daily_summary: string
+  up_count: number
+  down_count: number
+}
+
+export const fetchMarketSummary = () =>
+  http.get<ApiResponse<MarketSummary>>('/market/summary')

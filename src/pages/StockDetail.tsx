@@ -4,6 +4,7 @@ import {
   ArrowLeft, Star, StarOff, RefreshCw,
   TrendingUp, TrendingDown, Minus,
   BarChart2, Activity, DollarSign,
+  BrainCircuit, Banknote,
 } from 'lucide-react'
 import Topbar from '@/components/Topbar'
 import KLineChart from '@/components/KLineChart'
@@ -12,11 +13,13 @@ import { useQuery } from '@/hooks/useQuery'
 import {
   fetchQuote, fetchKLine, fetchAnalysis,
   addToWatchlist, removeFromWatchlist, fetchWatchlist,
+  fetchMoneyFlow, refreshMoneyFlow,
 } from '@/api/stock'
 import {
   getPriceColor, formatRate, formatPrice,
   formatAmount, formatVolume, ErrorBanner,
 } from '@/components/shared'
+import type { MoneyFlowLog } from '@/types'
 
 // ── 行情指标卡片 ──────────────────────────────────────────────────
 interface MetricProps {
@@ -71,14 +74,241 @@ function KLineToolbar({ period, onChange, loading }: KLineToolbarProps) {
   )
 }
 
+// ── 资金流向面板 ──────────────────────────────────────────────────
+
+function formatYuan(yuan: number) {
+  const abs = Math.abs(yuan)
+  const sign = yuan >= 0 ? '+' : '-'
+  if (abs >= 1e8) return `${sign}${(abs / 1e8).toFixed(2)}亿`
+  return `${sign}${(abs / 1e4).toFixed(0)}万`
+}
+
+function inflowColor(v: number) {
+  if (v > 0) return 'text-accent-green'
+  if (v < 0) return 'text-accent-red'
+  return 'text-ink-muted'
+}
+
+interface MoneyFlowPanelProps {
+  code: string
+}
+
+function MoneyFlowPanel({ code }: MoneyFlowPanelProps) {
+  const [refreshing, setRefreshing] = useState(false)
+  const [liveData, setLiveData]     = useState<Record<string, string | number> | null>(null)
+  const [liveErr,  setLiveErr]      = useState('')
+  const [histKey,  setHistKey]      = useState(0)
+
+  // 历史快照（DB）
+  const { data, loading, error, refetch } = useQuery(
+    useCallback(() => fetchMoneyFlow(code, 10), [code, histKey]),
+  )
+
+  const logs: MoneyFlowLog[] = data?.items ?? []
+  const latest = logs[0] ?? null
+
+  // 手动抓取实时数据
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    setLiveErr('')
+    try {
+      const resp = await refreshMoneyFlow(code)
+      setLiveData(resp.data.data as Record<string, string | number>)
+      setHistKey(k => k + 1) // 重新拉历史
+    } catch (e) {
+      setLiveErr(e instanceof Error ? e.message : '抓取失败')
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
+  // 展示优先级：实时抓取结果 > DB 最新快照
+  const mainInflow  = liveData
+    ? Number(liveData.main_net_inflow)
+    : latest?.main_net_inflow ?? null
+
+  const superInflow = liveData
+    ? Number(liveData.super_large_inflow)
+    : latest?.super_large_inflow ?? null
+
+  const largeInflow = liveData
+    ? Number(liveData.large_inflow)
+    : latest?.large_inflow ?? null
+
+  const pct = liveData
+    ? Number(liveData.main_inflow_pct)
+    : latest?.main_inflow_pct ?? null
+
+  const updatedAt = liveData
+    ? '刚刚'
+    : latest
+      ? new Date(latest.created_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+      : null
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* 标题栏 */}
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-terminal-border flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <Banknote size={13} className="text-accent-green" />
+          <span className="text-xs font-medium text-ink-primary">主力资金流向</span>
+          {updatedAt && (
+            <span className="text-[10px] font-mono text-ink-muted">更新 {updatedAt}</span>
+          )}
+        </div>
+        <button
+          onClick={handleRefresh}
+          disabled={refreshing}
+          className="flex items-center gap-1 text-[11px] font-mono text-ink-muted hover:text-accent-cyan transition-colors disabled:opacity-40"
+        >
+          <RefreshCw size={11} className={refreshing ? 'animate-spin' : ''} />
+          实时刷新
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {liveErr && <ErrorBanner message={liveErr} />}
+
+        {loading && logs.length === 0 ? (
+          <div className="space-y-3">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="h-10 bg-terminal-muted rounded animate-pulse" />
+            ))}
+          </div>
+        ) : mainInflow === null ? (
+          /* 没有任何数据 */
+          <div className="flex flex-col items-center justify-center py-10 text-ink-muted gap-3">
+            <Banknote size={28} strokeWidth={1.2} className="opacity-30" />
+            <p className="text-xs font-mono text-center">
+              暂无资金流向数据
+            </p>
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="btn-ghost text-xs disabled:opacity-40"
+            >
+              {refreshing
+                ? <><RefreshCw size={11} className="animate-spin" />抓取中…</>
+                : '立即抓取实时数据'
+              }
+            </button>
+          </div>
+        ) : (
+          <>
+            {/* 核心指标卡片组 */}
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { label: '主力净流入', value: mainInflow,  highlight: true },
+                { label: '超大单净入', value: superInflow ?? 0 },
+                { label: '大单净流入', value: largeInflow ?? 0 },
+                { label: '主力占比',   value: null, pct: pct ?? 0 },
+              ].map(({ label, value, highlight, pct: p }) => (
+                <div
+                  key={label}
+                  className={`rounded-lg p-3 border ${
+                    highlight
+                      ? 'border-accent-green/30 bg-accent-green/5'
+                      : 'border-terminal-border bg-terminal-muted/40'
+                  }`}
+                >
+                  <p className="text-[10px] font-mono text-ink-muted mb-1">{label}</p>
+                  {value !== null && value !== undefined ? (
+                    <p className={`text-sm font-mono font-bold ${inflowColor(value)}`}>
+                      {formatYuan(value)}
+                    </p>
+                  ) : (
+                    <p className={`text-sm font-mono font-bold ${(p ?? 0) >= 0 ? 'text-accent-green' : 'text-accent-red'}`}>
+                      {(p ?? 0) >= 0 ? '+' : ''}{(p ?? 0).toFixed(2)}%
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* 资金流向柱状可视化 */}
+            {mainInflow !== null && (
+              <div className="space-y-2">
+                <p className="text-[10px] font-mono text-ink-muted uppercase tracking-wider">资金结构</p>
+                {[
+                  { label: '超大单', value: superInflow ?? 0, max: Math.abs(mainInflow) || 1 },
+                  { label: '大单',   value: largeInflow ?? 0, max: Math.abs(mainInflow) || 1 },
+                ].map(({ label, value, max }) => {
+                  const pct = Math.min(Math.abs(value) / max * 100, 100)
+                  const isPos = value >= 0
+                  return (
+                    <div key={label} className="flex items-center gap-2">
+                      <span className="text-[10px] font-mono text-ink-muted w-10 flex-shrink-0">{label}</span>
+                      <div className="flex-1 h-2 bg-terminal-muted rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-500 ${isPos ? 'bg-accent-green/60' : 'bg-accent-red/60'}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <span className={`text-[10px] font-mono w-16 text-right flex-shrink-0 ${inflowColor(value)}`}>
+                        {formatYuan(value)}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* 历史快照表（最近 10 条） */}
+            {logs.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-mono text-ink-muted uppercase tracking-wider">历史快照</p>
+                <div className="rounded-lg border border-terminal-border overflow-hidden">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-terminal-border bg-terminal-muted">
+                        <th className="px-2 py-1.5 text-left font-mono text-ink-muted text-[10px]">时间</th>
+                        <th className="px-2 py-1.5 text-right font-mono text-ink-muted text-[10px]">主力净入</th>
+                        <th className="px-2 py-1.5 text-right font-mono text-ink-muted text-[10px]">占比</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {logs.map(log => (
+                        <tr key={log.id} className="border-b border-terminal-border/50 last:border-0">
+                          <td className="px-2 py-1.5 font-mono text-ink-muted text-[10px]">
+                            {new Date(log.created_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+                          </td>
+                          <td className={`px-2 py-1.5 font-mono text-right text-[10px] font-semibold ${inflowColor(log.main_net_inflow)}`}>
+                            {formatYuan(log.main_net_inflow)}
+                          </td>
+                          <td className={`px-2 py-1.5 font-mono text-right text-[10px] ${inflowColor(log.main_inflow_pct)}`}>
+                            {log.main_inflow_pct >= 0 ? '+' : ''}{log.main_inflow_pct.toFixed(2)}%
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {error && (
+        <div className="px-4 pb-3 flex-shrink-0">
+          <ErrorBanner message={error} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── 右侧面板 Tab ──────────────────────────────────────────────────
+type RightTab = 'ai' | 'moneyflow'
+
 // ── 主页面 ────────────────────────────────────────────────────────
 export default function StockDetail() {
   const { code = '' } = useParams<{ code: string }>()
   const navigate        = useNavigate()
-  const [period, setPeriod] = useState<Period>(120)
+  const [period, setPeriod]       = useState<Period>(120)
   const [inWatchlist, setInWatchlist] = useState<boolean | null>(null)
+  const [rightTab, setRightTab]   = useState<RightTab>('ai')
 
-  // ── 实时行情（每 10s 刷新）────────────────────────────────────
   const {
     data: quote, loading: quoteLoading, error: quoteError, refetch: refetchQuote,
   } = useQuery(
@@ -86,21 +316,18 @@ export default function StockDetail() {
     { refetchInterval: 10_000 },
   )
 
-  // ── K 线数据 ──────────────────────────────────────────────────
   const {
     data: klineData, loading: klineLoading, error: klineError, refetch: refetchKLine,
   } = useQuery(
     useCallback(() => fetchKLine(code, period), [code, period]),
   )
 
-  // ── AI 分析（手动触发，30min 缓存）────────────────────────────
   const {
     data: analysis, loading: analysisLoading, error: analysisError, refetch: refetchAnalysis,
   } = useQuery(
     useCallback(() => fetchAnalysis(code), [code]),
   )
 
-  // ── 检查是否在自选股 ──────────────────────────────────────────
   useQuery(
     useCallback(() => fetchWatchlist(), []),
     {
@@ -110,7 +337,6 @@ export default function StockDetail() {
     },
   )
 
-  // ── 自选股切换 ────────────────────────────────────────────────
   const toggleWatchlist = async () => {
     try {
       if (inWatchlist) {
@@ -139,11 +365,9 @@ export default function StockDetail() {
       />
 
       <div className="flex-1 overflow-hidden flex flex-col min-h-0">
-        {/* ── 行情头部条 ───────────────────────────────────────── */}
+        {/* 行情头部条 */}
         <div className="flex-shrink-0 px-5 py-3 border-b border-terminal-border bg-terminal-surface">
           <div className="flex items-center justify-between flex-wrap gap-4">
-
-            {/* 左：返回 + 价格 */}
             <div className="flex items-center gap-4">
               <button
                 onClick={() => navigate(-1)}
@@ -152,9 +376,7 @@ export default function StockDetail() {
                 <ArrowLeft size={14} />
                 返回
               </button>
-
               <div className="w-px h-8 bg-terminal-border" />
-
               {quoteLoading && !quote ? (
                 <div className="flex items-center gap-3">
                   <div className="h-8 w-24 bg-terminal-muted rounded animate-pulse" />
@@ -178,43 +400,22 @@ export default function StockDetail() {
               ) : null}
             </div>
 
-            {/* 右：指标 + 自选股按钮 */}
             <div className="flex items-center gap-6">
               {quote && (
                 <div className="hidden lg:grid grid-cols-4 gap-6">
                   <Metric label="今开" value={formatPrice(quote.open)} />
                   <Metric label="昨收" value={formatPrice(quote.close)} />
-                  <Metric
-                    label="最高"
-                    value={formatPrice(quote.high)}
-                    color="text-accent-green"
-                  />
-                  <Metric
-                    label="最低"
-                    value={formatPrice(quote.low)}
-                    color="text-accent-red"
-                  />
+                  <Metric label="最高" value={formatPrice(quote.high)} color="text-accent-green" />
+                  <Metric label="最低" value={formatPrice(quote.low)}  color="text-accent-red"   />
                 </div>
               )}
-
               {quote && (
                 <div className="hidden xl:grid grid-cols-3 gap-6">
-                  <Metric
-                    label="成交量"
-                    value={formatVolume(quote.volume)}
-                    sub={`量比 ${quote.volume_ratio.toFixed(2)}`}
-                  />
-                  <Metric
-                    label="成交额"
-                    value={formatAmount(quote.amount)}
-                  />
-                  <Metric
-                    label="换手率"
-                    value={`${quote.turnover.toFixed(2)}%`}
-                  />
+                  <Metric label="成交量" value={formatVolume(quote.volume)} sub={`量比 ${quote.volume_ratio.toFixed(2)}`} />
+                  <Metric label="成交额" value={formatAmount(quote.amount)} />
+                  <Metric label="换手率" value={`${quote.turnover.toFixed(2)}%`} />
                 </div>
               )}
-
               <button
                 onClick={toggleWatchlist}
                 className={`flex items-center gap-2 px-3 py-1.5 rounded-md border text-sm transition-all ${
@@ -223,43 +424,28 @@ export default function StockDetail() {
                     : 'border-terminal-border text-ink-muted hover:border-accent-amber/50 hover:text-accent-amber'
                 }`}
               >
-                {inWatchlist
-                  ? <><StarOff size={13} />已自选</>
-                  : <><Star size={13} />加自选</>
-                }
+                {inWatchlist ? <><StarOff size={13} />已自选</> : <><Star size={13} />加自选</>}
               </button>
             </div>
           </div>
         </div>
 
-        {/* ── 主内容区：左 K 线 + 右 AI 分析 ─────────────────── */}
+        {/* 主内容区 */}
         <div className="flex-1 min-h-0 flex overflow-hidden">
 
           {/* 左：K 线区 */}
           <div className="flex-1 min-w-0 flex flex-col border-r border-terminal-border overflow-hidden">
-            {/* K 线工具栏 */}
             <div className="flex items-center justify-between px-4 py-2 border-b border-terminal-border flex-shrink-0">
               <div className="flex items-center gap-2">
                 <BarChart2 size={13} className="text-ink-muted" />
                 <span className="text-xs font-mono text-ink-muted">日K · 前复权</span>
-                {klineData && (
-                  <span className="tag">{klineData.klines.length} 根</span>
-                )}
+                {klineData && <span className="tag">{klineData.klines.length} 根</span>}
               </div>
-              <KLineToolbar
-                period={period}
-                onChange={setPeriod}
-                loading={klineLoading}
-              />
+              <KLineToolbar period={period} onChange={setPeriod} loading={klineLoading} />
             </div>
 
-            {/* K 线图 */}
             <div className="flex-1 min-h-0 p-2">
-              {klineError && (
-                <div className="p-4">
-                  <ErrorBanner message={klineError} />
-                </div>
-              )}
+              {klineError && <div className="p-4"><ErrorBanner message={klineError} /></div>}
               {klineLoading && !klineData && (
                 <div className="h-full flex items-center justify-center">
                   <div className="flex flex-col items-center gap-3 text-ink-muted">
@@ -269,10 +455,7 @@ export default function StockDetail() {
                 </div>
               )}
               {klineData && klineData.klines.length > 0 && (
-                <KLineChart
-                  data={klineData}
-                  height={undefined} // 自适应
-                />
+                <KLineChart data={klineData} height={undefined} />
               )}
               {klineData && klineData.klines.length === 0 && (
                 <div className="h-full flex items-center justify-center text-ink-muted text-sm">
@@ -281,7 +464,6 @@ export default function StockDetail() {
               )}
             </div>
 
-            {/* 移动端指标补充 */}
             {quote && (
               <div className="lg:hidden flex-shrink-0 grid grid-cols-4 gap-3 px-4 py-3 border-t border-terminal-border">
                 <Metric label="今开"  value={formatPrice(quote.open)} />
@@ -292,15 +474,16 @@ export default function StockDetail() {
             )}
           </div>
 
-          {/* 右：AI 分析面板 */}
+          {/* 右：Tab 面板（AI 分析 / 资金流向） */}
           <div className="w-80 xl:w-96 flex-shrink-0 flex flex-col overflow-hidden">
-            {/* 快速指标 */}
+
+            {/* 快速指标行 */}
             {quote && (
               <div className="flex-shrink-0 grid grid-cols-3 gap-0 border-b border-terminal-border">
                 {[
-                  { label: '量比',  value: quote.volume_ratio.toFixed(2), icon: Activity },
-                  { label: '换手',  value: `${quote.turnover.toFixed(2)}%`, icon: DollarSign },
-                  { label: '成交额', value: formatAmount(quote.amount), icon: BarChart2 },
+                  { label: '量比',   value: quote.volume_ratio.toFixed(2), icon: Activity    },
+                  { label: '换手',   value: `${quote.turnover.toFixed(2)}%`, icon: DollarSign },
+                  { label: '成交额', value: formatAmount(quote.amount),    icon: BarChart2   },
                 ].map(({ label, value, icon: Icon }) => (
                   <div key={label} className="flex flex-col items-center py-3 border-r border-terminal-border last:border-r-0">
                     <Icon size={12} className="text-ink-muted mb-1" />
@@ -311,14 +494,39 @@ export default function StockDetail() {
               </div>
             )}
 
-            {/* AI 报告 */}
+            {/* Tab 切换按钮 */}
+            <div className="flex-shrink-0 flex border-b border-terminal-border">
+              {([
+                { key: 'ai',        label: 'AI 分析', icon: BrainCircuit },
+                { key: 'moneyflow', label: '资金流向', icon: Banknote     },
+              ] as { key: RightTab; label: string; icon: React.ElementType }[]).map(({ key, label, icon: Icon }) => (
+                <button
+                  key={key}
+                  onClick={() => setRightTab(key)}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-mono transition-colors border-b-2 ${
+                    rightTab === key
+                      ? 'border-accent-cyan text-accent-cyan'
+                      : 'border-transparent text-ink-muted hover:text-ink-secondary'
+                  }`}
+                >
+                  <Icon size={12} />
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {/* Tab 内容 */}
             <div className="flex-1 overflow-hidden">
-              <AIReportPanel
-                data={analysis}
-                loading={analysisLoading}
-                error={analysisError}
-                onRefresh={refetchAnalysis}
-              />
+              {rightTab === 'ai' ? (
+                <AIReportPanel
+                  data={analysis}
+                  loading={analysisLoading}
+                  error={analysisError}
+                  onRefresh={refetchAnalysis}
+                />
+              ) : (
+                <MoneyFlowPanel code={code} />
+              )}
             </div>
           </div>
         </div>

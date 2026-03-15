@@ -3,124 +3,125 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  * {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-  }
-
-  html {
-    font-size: 14px;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-  }
-
-  body {
-    background-color: #0a0e14;
-    color: #e8edf3;
-    font-family: 'DM Sans', system-ui, sans-serif;
-    min-height: 100vh;
-    overflow-x: hidden;
-  }
-
-  /* 滚动条样式 */
-  ::-webkit-scrollbar {
-    width: 4px;
-    height: 4px;
-  }
-  ::-webkit-scrollbar-track {
-    background: #0d1117;
-  }
-  ::-webkit-scrollbar-thumb {
-    background: #1e2d3d;
-    border-radius: 2px;
-  }
-  ::-webkit-scrollbar-thumb:hover {
-    background: #3d5166;
-  }
-
-  /* 数字/数据统一使用等宽字体 */
-  .font-data {
-    font-family: 'JetBrains Mono', 'Roboto Mono', monospace;
-    font-variant-numeric: tabular-nums;
-  }
+/* ── AI 报告 Markdown 渲染样式 ─────────────────────────────────── */
+.prose-report {
+  font-size: 12px;
+  line-height: 1.7;
+  color: #a0a0b8;
+}
+.prose-report h1, .prose-report h2, .prose-report h3 {
+  color: #e0e0f0;
+  font-weight: 600;
+  margin-top: 1.2em;
+  margin-bottom: 0.4em;
+  padding-bottom: 0.2em;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+.prose-report h1 { font-size: 1.1em; }
+.prose-report h2 { font-size: 1em; }
+.prose-report h3 { font-size: 0.95em; color: #06b6d4; border-bottom: none; }
+.prose-report p  { margin: 0.5em 0; }
+.prose-report strong { color: #e0e0f0; font-weight: 600; }
+.prose-report em     { color: #f59e0b; font-style: normal; }
+.prose-report ul, .prose-report ol {
+  padding-left: 1.2em;
+  margin: 0.4em 0;
+}
+.prose-report li { margin: 0.2em 0; }
+.prose-report code {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.9em;
+  background: rgba(6,182,212,0.1);
+  border: 1px solid rgba(6,182,212,0.2);
+  color: #06b6d4;
+  padding: 0.1em 0.4em;
+  border-radius: 3px;
+}
+.prose-report pre {
+  background: rgba(0,0,0,0.3);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 6px;
+  padding: 0.8em 1em;
+  overflow-x: auto;
+  margin: 0.6em 0;
+}
+.prose-report pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #a0a0b8;
+}
+.prose-report blockquote {
+  border-left: 3px solid #f59e0b;
+  background: rgba(245,158,11,0.05);
+  padding: 0.4em 0.8em;
+  margin: 0.6em 0;
+  border-radius: 0 4px 4px 0;
+}
+.prose-report table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9em;
+  margin: 0.6em 0;
+}
+.prose-report th {
+  background: rgba(255,255,255,0.05);
+  color: #e0e0f0;
+  font-weight: 600;
+  padding: 0.4em 0.6em;
+  text-align: left;
+  border: 1px solid rgba(255,255,255,0.08);
+}
+.prose-report td {
+  padding: 0.35em 0.6em;
+  border: 1px solid rgba(255,255,255,0.06);
+}
+.prose-report tr:nth-child(even) td {
+  background: rgba(255,255,255,0.02);
+}
+.prose-report hr {
+  border: none;
+  border-top: 1px solid rgba(255,255,255,0.07);
+  margin: 0.8em 0;
 }
 
-@layer components {
-  /* 上涨/下跌颜色工具类 */
-  .text-up   { @apply text-accent-green; }
-  .text-down { @apply text-accent-red; }
-  .text-flat { @apply text-ink-secondary; }
-
-  /* 卡片基础样式 */
-  .card {
-    @apply bg-terminal-surface border border-terminal-border rounded-lg;
-  }
-
-  /* 终端风格标签 */
-  .tag {
-    @apply inline-flex items-center gap-1 px-2 py-0.5
-           text-xs font-mono rounded
-           bg-terminal-muted border border-terminal-border
-           text-ink-secondary;
-  }
-
-  /* 按钮 - 主要 */
-  .btn-primary {
-    @apply inline-flex items-center gap-2 px-4 py-2
-           text-sm font-medium rounded-md
-           bg-accent-green text-terminal-bg
-           hover:bg-opacity-90 active:scale-95
-           transition-all duration-150;
-  }
-
-  /* 按钮 - 幽灵 */
-  .btn-ghost {
-    @apply inline-flex items-center gap-2 px-3 py-1.5
-           text-sm font-medium rounded-md
-           text-ink-secondary border border-terminal-border
-           hover:text-ink-primary hover:border-accent-blue hover:bg-terminal-muted
-           transition-all duration-150;
-  }
-
-  /* 数据行高亮（表格行 hover）*/
-  .data-row {
-    @apply border-b border-terminal-border
-           hover:bg-terminal-muted
-           transition-colors duration-100 cursor-pointer;
-  }
+/* ── 主操作按钮（青绿色，暗色背景下清晰可见）────────────────────── */
+.btn-primary {
+  @apply flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold font-mono
+         bg-accent-green/15 border border-accent-green/40 text-accent-green
+         hover:bg-accent-green/25 hover:border-accent-green/60
+         active:bg-accent-green/30
+         disabled:opacity-40 disabled:cursor-not-allowed
+         transition-all duration-150;
 }
 
-/* ── 特殊动效 ── */
-
-/* 实时数据闪烁（价格更新时）*/
-@keyframes flash-up {
-  0%, 100% { background-color: transparent; }
-  50%       { background-color: rgba(0, 217, 126, 0.15); }
-}
-@keyframes flash-down {
-  0%, 100% { background-color: transparent; }
-  50%       { background-color: rgba(255, 77, 106, 0.15); }
-}
-.flash-up   { animation: flash-up   0.6s ease-out; }
-.flash-down { animation: flash-down 0.6s ease-out; }
-
-/* 终端光标 */
-.cursor::after {
-  content: '▋';
-  animation: blink 1s step-end infinite;
-  color: #00d97e;
-  margin-left: 2px;
+/* ── 幽灵按钮（次要操作）────────────────────────────────────────── */
+.btn-ghost {
+  @apply flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono
+         border border-terminal-border text-ink-muted
+         hover:text-ink-secondary hover:border-terminal-border/80 transition-colors;
 }
 
-/* 扫描线背景纹理（营造 CRT 感）*/
-.scanline {
-  background-image: repeating-linear-gradient(
-    0deg,
-    transparent,
-    transparent 2px,
-    rgba(0, 0, 0, 0.03) 2px,
-    rgba(0, 0, 0, 0.03) 4px
-  );
+/* ── 持仓守护：止损呼吸灯 ─────────────────────────────────────────── */
+@keyframes stop-loss-glow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(255, 77, 106, 0);
+    border-color: rgba(239, 68, 68, 0.45);
+  }
+  50% {
+    box-shadow: 0 0 0 3px rgba(255, 77, 106, 0.12), 0 0 20px rgba(255, 77, 106, 0.18);
+    border-color: rgba(239, 68, 68, 0.85);
+  }
+}
+.stop-loss-card {
+  animation: stop-loss-glow 1.4s ease-in-out infinite;
+}
+
+/* slide-up 弹窗动画 */
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0);    }
+}
+.animate-slide-up {
+  animation: slideUp 0.2s ease-out;
 }

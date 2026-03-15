@@ -4,44 +4,40 @@ import {
   Star,
   ScrollText,
   ScanLine,
-  Activity,
+  Radar,
+  Shield,
   Settings,
   ChevronRight,
+  Brain,
 } from 'lucide-react'
 
-// ── 导航项定义 ────────────────────────────────────────────────────
 const NAV_ITEMS = [
   {
     group: '市场',
     items: [
-      { to: '/',          icon: LayoutDashboard, label: '仪表盘',   badge: null    },
-      { to: '/watchlist', icon: Star,            label: '自选股',   badge: null    },
-      { to: '/scan',      icon: ScanLine,        label: '信号扫描', badge: 'NEW'   },
+      { to: '/',         icon: LayoutDashboard, label: '仪表盘',   badge: null  },
+      { to: '/watchlist', icon: Star,           label: '自选股',   badge: null  },
+      { to: '/scan',     icon: ScanLine,        label: '信号扫描', badge: null  },
+      { to: '/radar',    icon: Radar,           label: '机会雷达', badge: null  },
     ],
   },
   {
     group: '账户',
     items: [
-      { to: '/trades',    icon: ScrollText, label: '交易日志', badge: null  },
-      { to: '/analysis',  icon: Activity,   label: 'AI 分析',  badge: 'BETA' },
+      { to: '/guardian', icon: Shield,    label: '持仓守护', badge: 'NEW' },
+      { to: '/review',   icon: Brain,      label: '深度复盘', badge: 'AI'  },
+      { to: '/trades',   icon: ScrollText, label: '交易日志', badge: null  },
     ],
   },
 ]
 
-// ── 品牌 Logo 区 ──────────────────────────────────────────────────
 function SidebarLogo() {
   return (
     <div className="px-4 py-5 border-b border-terminal-border">
       <div className="flex items-center gap-3">
         <div className="w-8 h-8 rounded-md bg-terminal-muted border border-terminal-border flex items-center justify-center flex-shrink-0">
           <svg viewBox="0 0 20 20" className="w-4.5 h-4.5" fill="none">
-            <polyline
-              points="2,14 6,8 10,11 14,4 18,7"
-              stroke="#00d97e"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
+            <polyline points="2,14 6,8 10,11 14,4 18,7" stroke="#00d97e" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
             <circle cx="18" cy="7" r="1.5" fill="#00d97e" />
           </svg>
         </div>
@@ -54,14 +50,10 @@ function SidebarLogo() {
   )
 }
 
-// ── 市场状态指示 ──────────────────────────────────────────────────
 function MarketStatus() {
   const now   = new Date()
   const total = now.getHours() * 60 + now.getMinutes()
-  const isOpen =
-    (total >= 570 && total <= 690) ||  // 09:30–11:30
-    (total >= 780 && total <= 900)     // 13:00–15:00
-
+  const isOpen = (total >= 570 && total <= 690) || (total >= 780 && total <= 900)
   return (
     <div className="px-4 py-3 border-b border-terminal-border">
       <div className="flex items-center justify-between">
@@ -77,7 +69,6 @@ function MarketStatus() {
   )
 }
 
-// ── 单个导航项 ────────────────────────────────────────────────────
 interface NavItemProps {
   to: string
   icon: React.ElementType
@@ -87,10 +78,7 @@ interface NavItemProps {
 
 function NavItem({ to, icon: Icon, label, badge }: NavItemProps) {
   const location = useLocation()
-  const isActive = to === '/'
-    ? location.pathname === '/'
-    : location.pathname.startsWith(to)
-
+  const isActive = to === '/' ? location.pathname === '/' : location.pathname.startsWith(to)
   return (
     <NavLink to={to} end={to === '/'}>
       <div className={`
@@ -125,7 +113,6 @@ function NavItem({ to, icon: Icon, label, badge }: NavItemProps) {
   )
 }
 
-// ── 底部 ──────────────────────────────────────────────────────────
 function SidebarFooter() {
   return (
     <div className="border-t border-terminal-border p-3">
@@ -135,9 +122,7 @@ function SidebarFooter() {
           {[['/', '搜索股票'], ['R', '刷新行情']].map(([key, desc]) => (
             <div key={key} className="flex items-center justify-between">
               <span className="text-ink-muted text-xs">{desc}</span>
-              <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-terminal-muted border border-terminal-border text-ink-secondary">
-                {key}
-              </kbd>
+              <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-terminal-muted border border-terminal-border text-ink-secondary">{key}</kbd>
             </div>
           ))}
         </div>
@@ -150,7 +135,6 @@ function SidebarFooter() {
   )
 }
 
-// ── 主 Sidebar 组件 ───────────────────────────────────────────────
 export default function Sidebar() {
   return (
     <aside className="w-52 flex-shrink-0 h-screen flex flex-col bg-terminal-panel border-r border-terminal-border animate-slide-in">

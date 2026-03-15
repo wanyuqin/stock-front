@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { Star, TrendingUp, TrendingDown, Activity, Database, ExternalLink } from 'lucide-react'
 import Topbar from '@/components/Topbar'
 import DailyReportView from '@/components/DailyReportView'
+import AlertPanel from '@/components/AlertPanel'
+import MarketSentimentBar from '@/components/MarketSentimentBar'
 import { useQuery } from '@/hooks/useQuery'
 import { fetchWatchlist, fetchStocks } from '@/api/stock'
 import {
@@ -52,10 +54,7 @@ function WatchlistSnapshot() {
           <span className="text-sm font-medium text-ink-primary">自选股行情</span>
           <span className="tag">{items.length} 只</span>
         </div>
-        <button
-          onClick={refetch}
-          className="text-xs font-mono text-ink-muted hover:text-accent-cyan transition-colors"
-        >
+        <button onClick={refetch} className="text-xs font-mono text-ink-muted hover:text-accent-cyan transition-colors">
           刷新
         </button>
       </div>
@@ -82,11 +81,7 @@ function WatchlistSnapshot() {
                   const rate  = q?.change_rate ?? 0
                   const color = getPriceColor(rate)
                   return (
-                    <tr
-                      key={item.id}
-                      className="data-row group"
-                      onClick={() => navigate(`/stocks/${item.stock_code}`)}
-                    >
+                    <tr key={item.id} className="data-row group" onClick={() => navigate(`/stocks/${item.stock_code}`)}>
                       <td className="px-4 py-3">
                         <span className="font-mono text-ink-muted text-xs">{item.stock_code}</span>
                         <span className="ml-2 text-ink-primary text-sm">{q?.name ?? '—'}</span>
@@ -95,23 +90,12 @@ function WatchlistSnapshot() {
                             {item.note}
                           </span>
                         )}
-                        <ExternalLink
-                          size={10}
-                          className="ml-1.5 inline-block text-ink-muted opacity-0 group-hover:opacity-100 transition-opacity"
-                        />
+                        <ExternalLink size={10} className="ml-1.5 inline-block text-ink-muted opacity-0 group-hover:opacity-100 transition-opacity" />
                       </td>
-                      <td className={`px-4 py-3 font-mono font-medium ${color}`}>
-                        {q ? formatPrice(q.price) : '—'}
-                      </td>
-                      <td className={`px-4 py-3 font-mono text-sm ${color}`}>
-                        {q ? formatRate(rate) : '—'}
-                      </td>
-                      <td className={`px-4 py-3 font-mono text-sm ${color}`}>
-                        {q ? (rate > 0 ? '+' : '') + q.change.toFixed(2) : '—'}
-                      </td>
-                      <td className="px-4 py-3 font-mono text-sm text-ink-secondary">
-                        {q ? formatAmount(q.amount) : '—'}
-                      </td>
+                      <td className={`px-4 py-3 font-mono font-medium ${color}`}>{q ? formatPrice(q.price) : '—'}</td>
+                      <td className={`px-4 py-3 font-mono text-sm ${color}`}>{q ? formatRate(rate) : '—'}</td>
+                      <td className={`px-4 py-3 font-mono text-sm ${color}`}>{q ? (rate > 0 ? '+' : '') + q.change.toFixed(2) : '—'}</td>
+                      <td className="px-4 py-3 font-mono text-sm text-ink-secondary">{q ? formatAmount(q.amount) : '—'}</td>
                     </tr>
                   )
                 })
@@ -125,9 +109,7 @@ function WatchlistSnapshot() {
 // ── 股票库概览 ────────────────────────────────────────────────────
 function StockLibrary() {
   const navigate = useNavigate()
-  const { data, loading } = useQuery(
-    useCallback(() => fetchStocks(10), []),
-  )
+  const { data, loading } = useQuery(useCallback(() => fetchStocks(10), []))
   const stocks = data?.items ?? []
 
   return (
@@ -137,7 +119,6 @@ function StockLibrary() {
         <span className="text-sm font-medium text-ink-primary">股票库</span>
         <span className="tag">最近收录</span>
       </div>
-
       <div className="divide-y divide-terminal-border">
         {loading && stocks.length === 0
           ? Array.from({ length: 5 }).map((_, i) => (
@@ -178,48 +159,35 @@ export default function Dashboard() {
 
   return (
     <div className="flex flex-col h-full">
-      <Topbar
-        title="仪表盘"
-        subtitle="个人 A 股分析系统"
-        onRefresh={refetch}
-        loading={wlLoading}
-      />
+      <Topbar title="仪表盘" subtitle="个人 A 股分析系统" onRefresh={refetch} loading={wlLoading} />
 
       <div className="flex-1 overflow-y-auto p-5 space-y-5">
-        {/* ── 统计卡片行 ── */}
+        {/* 全市场宏观监控 */}
+        <MarketSentimentBar />
+
+        {/* 统计卡片行 */}
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-          <StatCard
-            label="自选股"   value={String(items.length)} sub="只股票" icon={Star}
-            color="text-accent-amber"
-          />
-          <StatCard
-            label="上涨"     value={String(upCount)}
-            sub={items.length > 0 ? `占比 ${Math.round(upCount   / items.length * 100)}%` : '—'}
-            icon={TrendingUp}  color="text-accent-green"
-          />
-          <StatCard
-            label="下跌"     value={String(downCount)}
-            sub={items.length > 0 ? `占比 ${Math.round(downCount / items.length * 100)}%` : '—'}
-            icon={TrendingDown} color="text-accent-red"
-          />
-          <StatCard
-            label="总成交额"  value={formatAmount(totalAmt)} sub="自选股合计"
-            icon={Activity}   color="text-accent-cyan"
-          />
+          <StatCard label="自选股"  value={String(items.length)} sub="只股票"       icon={Star}        color="text-accent-amber" />
+          <StatCard label="上涨"    value={String(upCount)}      sub={items.length > 0 ? `占比 ${Math.round(upCount   / items.length * 100)}%` : '—'} icon={TrendingUp}  color="text-accent-green" />
+          <StatCard label="下跌"    value={String(downCount)}    sub={items.length > 0 ? `占比 ${Math.round(downCount / items.length * 100)}%` : '—'} icon={TrendingDown} color="text-accent-red"   />
+          <StatCard label="总成交额" value={formatAmount(totalAmt)} sub="自选股合计" icon={Activity}     color="text-accent-cyan"  />
         </div>
 
-        {/* ── 主内容区：左（行情 + 股票库）右（AI 复盘简报）── */}
+        {/* 主内容区：三栏布局 */}
         <div className="grid grid-cols-1 xl:grid-cols-5 gap-5">
-          {/* 左侧 3/5 */}
+
+          {/* 左侧 3/5：行情 + 股票库 */}
           <div className="xl:col-span-3 space-y-5">
             <WatchlistSnapshot />
             <StockLibrary />
           </div>
 
-          {/* 右侧 2/5 — 每日复盘简报 */}
-          <div className="xl:col-span-2">
-            <DailyReportView maxContentHeight={520} />
+          {/* 右侧 2/5：AI 复盘简报 + 主力脉冲告警（纵向堆叠） */}
+          <div className="xl:col-span-2 space-y-5">
+            <DailyReportView maxContentHeight={380} />
+            <AlertPanel maxHeight={320} />
           </div>
+
         </div>
       </div>
     </div>

@@ -4,16 +4,14 @@ import axios, {
   type AxiosResponse,
 } from 'axios'
 
+// ── 超时常量 ──────────────────────────────────────────────────────
+export const DEFAULT_TIMEOUT = 15_000   // 普通接口 15s
+export const AI_TIMEOUT      = 180_000  // AI 分析接口 3 分钟（大模型生成较慢）
+
 // ── Axios 实例 ────────────────────────────────────────────────────
-//
-// 请求链路：
-//   前端 baseURL = '/api/v1'
-//   → Vite dev server proxy '/api' → http://localhost:8888
-//   → 后端实际路由  http://localhost:8888/api/v1/stocks  ✓
-//
 const http = axios.create({
   baseURL: '/api/v1',
-  timeout: 10_000,
+  timeout: DEFAULT_TIMEOUT,
   headers: {
     'Content-Type': 'application/json',
     Accept: 'application/json',
@@ -22,12 +20,7 @@ const http = axios.create({
 
 // ── 请求拦截器 ────────────────────────────────────────────────────
 http.interceptors.request.use(
-  (config: InternalAxiosRequestConfig) => {
-    // 后续接入 JWT 时在此注入：
-    // const token = localStorage.getItem('token')
-    // if (token) config.headers.Authorization = `Bearer ${token}`
-    return config
-  },
+  (config: InternalAxiosRequestConfig) => config,
   (error: AxiosError) => Promise.reject(error),
 )
 
@@ -35,8 +28,6 @@ http.interceptors.request.use(
 http.interceptors.response.use(
   (response: AxiosResponse) => {
     const { data } = response
-    // 后端统一包装格式：{ code: 0, message: 'ok', data: {...} }
-    // code !== 0 视为业务错误
     if (typeof data?.code === 'number' && data.code !== 0) {
       return Promise.reject(new Error(data.message ?? '请求失败'))
     }
@@ -47,7 +38,12 @@ http.interceptors.response.use(
     let message = '网络异常，请稍后重试'
 
     if (!error.response) {
-      message = '无法连接到后端服务（请确认后端已在 :8888 启动）'
+      // 区分超时和断连
+      if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+        message = 'AI 分析耗时较长，请稍后重试'
+      } else {
+        message = '无法连接到后端服务（请确认后端已在 :8888 启动）'
+      }
     } else if (status === 400) {
       message = '请求参数错误'
     } else if (status === 404) {
