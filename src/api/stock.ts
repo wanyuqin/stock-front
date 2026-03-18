@@ -7,6 +7,7 @@ import type {
   ScreenerResult, ScreenerStatus,
   DiagnoseResponse, PositionDetail, SyncPositionRequest,
   PositionAIResult,
+  StockValuation, ValuationSummary,
 } from '@/types'
 
 // ── 股票 ──────────────────────────────────────────────────────────
@@ -113,11 +114,10 @@ export interface ScreenerExecuteRequest {
   date?:      string
 }
 
-/** syncMarketData 返回体 */
 export interface SyncResult {
   synced:      number
-  non_trading: boolean   // true = 非交易时段，空数据，不是错误
-  notice:      string    // 非交易时段时的友好提示文字
+  non_trading: boolean
+  notice:      string
 }
 
 export const executeScreener = (req: ScreenerExecuteRequest = {}) =>
@@ -157,3 +157,32 @@ export interface MarketSummary {
 
 export const fetchMarketSummary = () =>
   http.get<ApiResponse<MarketSummary>>('/market/summary')
+
+// ── 估值分位 ──────────────────────────────────────────────────────
+
+export const fetchValuation = (code: string) =>
+  http.get<ApiResponse<StockValuation>>(`/stocks/${code}/valuation`)
+
+export const fetchValuationSummary = () =>
+  http.get<ApiResponse<ValuationSummary>>('/market/valuation-summary')
+
+export const triggerValuationSync = () =>
+  http.post<ApiResponse<{ total: number; success: number; failed: number; message: string }>>(
+    '/market/valuation-sync',
+    {},
+  )
+
+// ── 大单分析 ────────────────────────────────────────────────
+
+// 按需拉取，失警频率不要超过 1次/30s
+export const fetchBigDeal = (code: string, changeRate?: number) =>
+  http.get<ApiResponse<import('@/types').BigDealSummary>>(
+    `/stocks/${code}/big-deal`,
+    changeRate !== undefined ? { params: { change_rate: changeRate } } : {},
+  )
+
+export const backfillValuationHistory = (days = 90) =>
+  http.post<ApiResponse<{ days: number; total: number; success: number; failed: number; message: string }>>(
+    `/market/valuation-backfill?days=${days}`,
+    {},
+  )

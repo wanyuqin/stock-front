@@ -8,10 +8,15 @@ import ScanPage from '@/pages/ScanPage'
 import OpportunityRadar from '@/pages/OpportunityRadar'
 import PortfolioGuardian from '@/pages/PortfolioGuardian'
 import TradeReviewHub from '@/pages/TradeReviewHub'
+import IntelStation from '@/pages/IntelStation'
+import ReportToast from '@/components/ReportToast'
 
 export default function App() {
   return (
     <BrowserRouter>
+      {/* 全局 Toast：监控持仓股新研报 */}
+      <ReportToast />
+
       <Routes>
         <Route element={<Layout />}>
           <Route index                element={<Dashboard />}         />
@@ -21,6 +26,7 @@ export default function App() {
           <Route path="scan"          element={<ScanPage />}          />
           <Route path="radar"         element={<OpportunityRadar />}  />
           <Route path="guardian"      element={<PortfolioGuardian />} />
+          <Route path="intel"         element={<IntelStation />}      />
           <Route path="stocks/:code"  element={<StockDetail />}       />
           <Route path="*"             element={<Navigate to="/" replace />} />
         </Route>

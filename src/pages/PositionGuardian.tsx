@@ -5,7 +5,7 @@ import {
   ArrowRight, AlertTriangle, Activity, ChevronDown, ChevronUp, X,
 } from 'lucide-react'
 import { fetchPositionDiagnosis, syncPosition } from '@/api/stock'
-import type { PositionDiagnosisResult, SignalType, SyncPositionRequest } from '@/types'
+import type { PositionDiagnosisResult, DiagnosticSnapshot, SignalType, SyncPositionRequest } from '@/types'
 
 // ── 信号配置表 ────────────────────────────────────────────────────
 
@@ -76,6 +76,77 @@ function PnlBadge({ pnl }: { pnl: number }) {
   )
 }
 
+// ── 板块相关性行 ──────────────────────────────────────────────────
+
+function SectorCorrelationRow({ s }: { s: DiagnosticSnapshot }) {
+  if (!s.sector_name) return null
+
+  const diff = s.rel_strength_diff
+  const isCritical = diff < -5
+  const isWarning  = diff < -2 && !isCritical
+  const isStrong   = diff >= 0
+
+  const sign = (n: number) => (n >= 0 ? '+' : '') + n.toFixed(1) + '%'
+
+  const statusLabel = isCritical ? '⚠️ 严重偏离' : isWarning ? '轻度落后' : isStrong ? '强势领先' : '基本同步'
+  const statusCls   = isCritical
+    ? 'text-red-400 bg-red-500/15'
+    : isWarning
+    ? 'text-amber-400 bg-amber-500/10'
+    : isStrong
+    ? 'text-accent-green bg-accent-green/10'
+    : 'text-sky-400 bg-sky-500/10'
+  const wrapCls = isCritical
+    ? 'bg-red-500/10 border-red-500/40'
+    : isWarning
+    ? 'bg-amber-500/8 border-amber-500/30'
+    : 'bg-terminal-bg/40 border-terminal-border/50'
+
+  return (
+    <div className={`rounded-lg border px-3 py-2.5 flex flex-col gap-1.5 ${wrapCls}`}>
+      {/* 标题行 */}
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] text-ink-muted font-mono uppercase tracking-wider">📊 板块相关性</span>
+        <span className={`text-xs font-mono font-semibold px-1.5 py-0.5 rounded ${statusCls}`}>
+          {statusLabel}
+        </span>
+      </div>
+
+      {/* 数据行 */}
+      <div className="flex items-center gap-3 text-xs font-mono flex-wrap">
+        <span className="text-ink-secondary font-medium">{s.sector_name}</span>
+        <span className="text-ink-muted">
+          个股5日 
+          <span className={s.stock_5d_change >= 0 ? 'text-accent-green' : 'text-red-400'}>
+            {sign(s.stock_5d_change)}
+          </span>
+        </span>
+        <span className="text-ink-muted">
+          板块 
+          <span className={s.sector_5d_change >= 0 ? 'text-accent-green' : 'text-red-400'}>
+            {sign(s.sector_5d_change)}
+          </span>
+        </span>
+        <span className="text-ink-muted">
+          强度差 
+          <span className={`font-semibold ${
+            isCritical ? 'text-red-400' : isWarning ? 'text-amber-400' : isStrong ? 'text-accent-green' : 'text-sky-400'
+          }`}>
+            {sign(diff)}
+          </span>
+        </span>
+      </div>
+
+      {/* 严重偏离警告文案 */}
+      {isCritical && s.sector_warning && (
+        <p className="text-xs text-red-400 font-semibold leading-snug border-t border-red-500/20 pt-1.5">
+          {s.sector_warning}
+        </p>
+      )}
+    </div>
+  )
+}
+
 // ── 单卡片 ────────────────────────────────────────────────────────
 
 function DiagnosisCard({ item, onViewDetail }: {
@@ -135,6 +206,17 @@ function DiagnosisCard({ item, onViewDetail }: {
         {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
         {expanded ? '收起技术面数据' : '展开技术面数据'}
       </button>
+
+      {/* ── 板块相关性行（常显示） ── */}
+      <SectorCorrelationRow s={s} />
+
+      {/* ── MA20 压力位提示行（常显示） ── */}
+      {s.ma20_pressure_tip && (
+        <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-terminal-bg/40 border border-terminal-border/50">
+          <span className="text-[11px] text-ink-muted font-mono uppercase tracking-wider flex-shrink-0 mt-0.5">📐 压力位</span>
+          <span className="text-xs text-ink-secondary leading-relaxed">{s.ma20_pressure_tip}</span>
+        </div>
+      )}
 
       {expanded && (
         <div className="grid grid-cols-2 gap-x-4 gap-y-2 pt-1 border-t border-terminal-border">

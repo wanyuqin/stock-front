@@ -9,22 +9,24 @@ import {
   Settings,
   ChevronRight,
   Brain,
+  Newspaper,
 } from 'lucide-react'
 
 const NAV_ITEMS = [
   {
     group: '市场',
     items: [
-      { to: '/',         icon: LayoutDashboard, label: '仪表盘',   badge: null  },
-      { to: '/watchlist', icon: Star,           label: '自选股',   badge: null  },
-      { to: '/scan',     icon: ScanLine,        label: '信号扫描', badge: null  },
-      { to: '/radar',    icon: Radar,           label: '机会雷达', badge: null  },
+      { to: '/',         icon: LayoutDashboard, label: '仪表盘',     badge: null   },
+      { to: '/watchlist', icon: Star,           label: '自选股',     badge: null   },
+      { to: '/scan',     icon: ScanLine,        label: '信号扫描',   badge: null   },
+      { to: '/radar',    icon: Radar,           label: '机会雷达',   badge: null   },
+      { to: '/intel',    icon: Newspaper,       label: '研报情报站', badge: 'NEW'  },
     ],
   },
   {
     group: '账户',
     items: [
-      { to: '/guardian', icon: Shield,    label: '持仓守护', badge: 'NEW' },
+      { to: '/guardian', icon: Shield,    label: '持仓守护', badge: null  },
       { to: '/review',   icon: Brain,      label: '深度复盘', badge: 'AI'  },
       { to: '/trades',   icon: ScrollText, label: '交易日志', badge: null  },
     ],

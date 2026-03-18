@@ -6,6 +6,8 @@ interface KLineChartProps {
   data: KLineResponse
   /** 固定高度（px）。不传则自动填满父容器高度 */
   height?: number
+  /** 持仓均价，传入后在 K 线图上画水平虚线标注成本 */
+  costPrice?: number
 }
 
 // ── 均线计算 ──────────────────────────────────────────────────────
@@ -20,13 +22,43 @@ function calcMA(period: number, data: [number, number, number, number][]): (numb
 }
 
 // ── 构建 ECharts option ───────────────────────────────────────────
-function buildOption(data: KLineResponse): echarts.EChartsOption {
+function buildOption(data: KLineResponse, costPrice?: number): echarts.EChartsOption {
   const ma5  = calcMA(5,  data.ohlc_data)
   const ma10 = calcMA(10, data.ohlc_data)
   const ma20 = calcMA(20, data.ohlc_data)
 
   // 默认展示最近 60 根（dataZoom start）
   const defaultStart = Math.max(0, Math.round((1 - 60 / Math.max(data.dates.length, 1)) * 100))
+
+  // ── 持仓成本 markLine ──────────────────────────────────────────
+  const costMarkLine = costPrice != null
+    ? {
+        silent: false,
+        symbol: ['none', 'none'],
+        animation: false,
+        data: [{
+          yAxis: costPrice,
+          name: '持仓成本',
+          label: {
+            show: true,
+            position: 'insideEndTop',
+            formatter: `持仓 ¥${costPrice.toFixed(2)}`,
+            color: '#fbbf24',
+            fontSize: 11,
+            fontFamily: 'JetBrains Mono, monospace',
+            fontWeight: 600,
+            backgroundColor: 'rgba(13,17,23,0.80)',
+            padding: [3, 7],
+            borderRadius: 3,
+          },
+          lineStyle: {
+            color: '#fbbf24',
+            width: 1.5,
+            type: 'dashed' as const,
+          },
+        }],
+      }
+    : undefined
 
   return {
     backgroundColor: 'transparent',
@@ -153,6 +185,11 @@ function buildOption(data: KLineResponse): echarts.EChartsOption {
         const vp = params.find((p: any) => p.seriesName === '成交量')
         const vol: number = vp ? vp.value[1] : 0
         const pct = open > 0 ? (((close - open) / open) * 100).toFixed(2) : '—'
+        // 若有成本，计算当前价与成本的盈亏
+        const costRow = costPrice != null
+          ? `<tr><td style="color:#fbbf24">持仓成本</td><td style="color:#fbbf24;text-align:right">¥${costPrice.toFixed(2)}</td></tr>
+             <tr><td style="color:#fbbf24">持仓盈亏</td><td style="color:${close >= costPrice ? '#00d97e' : '#ff4d6a'};text-align:right;font-weight:600">${close >= costPrice ? '+' : ''}${(((close - costPrice) / costPrice) * 100).toFixed(2)}%</td></tr>`
+          : ''
         return `
           <div style="min-width:168px;line-height:1.6">
             <div style="color:#7a8fa6;font-size:11px;margin-bottom:5px">${kp.axisValue}</div>
@@ -163,6 +200,7 @@ function buildOption(data: KLineResponse): echarts.EChartsOption {
               <tr><td style="color:#7a8fa6">最低</td><td style="color:#ff4d6a;text-align:right">${low.toFixed(2)}</td></tr>
               <tr><td style="color:#7a8fa6">涨跌</td><td style="color:${c};text-align:right">${isUp ? '+' : ''}${pct}%</td></tr>
               <tr><td style="color:#7a8fa6">成交量</td><td style="color:#7a8fa6;text-align:right">${vol >= 10000 ? (vol / 10000).toFixed(0) + '万手' : vol + '手'}</td></tr>
+              ${costRow}
             </table>
           </div>`
       },
@@ -181,6 +219,7 @@ function buildOption(data: KLineResponse): echarts.EChartsOption {
           borderColor0: '#ff4d6a',
           borderWidth:  1,
         },
+        markLine: costMarkLine,
       },
       {
         name: 'MA5',
@@ -217,7 +256,7 @@ function buildOption(data: KLineResponse): echarts.EChartsOption {
 }
 
 // ── 组件 ──────────────────────────────────────────────────────────
-export default function KLineChart({ data, height }: KLineChartProps) {
+export default function KLineChart({ data, height, costPrice }: KLineChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef     = useRef<echarts.ECharts | null>(null)
 
@@ -237,11 +276,11 @@ export default function KLineChart({ data, height }: KLineChartProps) {
     }
   }, [])
 
-  // 数据更新
+  // 数据更新（costPrice 变化也要重绘）
   useEffect(() => {
     if (!chartRef.current || !data) return
-    chartRef.current.setOption(buildOption(data), { notMerge: true })
-  }, [data])
+    chartRef.current.setOption(buildOption(data, costPrice), { notMerge: true })
+  }, [data, costPrice])
 
   return (
     <div

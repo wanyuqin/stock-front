@@ -1,13 +1,15 @@
 import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Star, StarOff, Plus, X, RefreshCw, ExternalLink } from 'lucide-react'
+import { Star, StarOff, Plus, X, RefreshCw, ExternalLink, TrendingUp, BarChart2 } from 'lucide-react'
 import Topbar from '@/components/Topbar'
+import ValuationBar from '@/components/ValuationBar'
 import { useQuery } from '@/hooks/useQuery'
-import { fetchWatchlist, addToWatchlist, removeFromWatchlist } from '@/api/stock'
+import { fetchWatchlist, addToWatchlist, removeFromWatchlist, fetchValuationSummary } from '@/api/stock'
 import {
   getPriceColor, formatRate, formatPrice,
   formatAmount, formatVolume, EmptyState, SkeletonRow, ErrorBanner,
 } from '@/components/shared'
+import type { ValuationSummaryItem } from '@/types'
 
 // ── 添加自选股弹框 ────────────────────────────────────────────────
 interface AddDialogProps {
@@ -81,17 +83,85 @@ function AddDialog({ onAdd, onClose }: AddDialogProps) {
   )
 }
 
+// ── 估值汇总条（表格上方） ─────────────────────────────────────────
+
+interface ValuationSummaryBarProps {
+  undervalued: number
+  normal: number
+  overvalued: number
+  unknown: number
+  total: number
+}
+
+function ValuationSummaryBar({ undervalued, normal, overvalued, unknown, total }: ValuationSummaryBarProps) {
+  if (total === 0) return null
+  return (
+    <div className="flex items-center gap-4 px-4 py-2 bg-terminal-muted/40 border border-terminal-border rounded-lg text-xs font-mono">
+      <div className="flex items-center gap-1.5">
+        <BarChart2 size={11} className="text-ink-muted" />
+        <span className="text-ink-muted">估值分布</span>
+      </div>
+      <div className="flex items-center gap-3 ml-2">
+        {undervalued > 0 && (
+          <span className="flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-accent-green inline-block" />
+            <span className="text-accent-green font-semibold">{undervalued}</span>
+            <span className="text-ink-muted">低估</span>
+          </span>
+        )}
+        {normal > 0 && (
+          <span className="flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-accent-blue/70 inline-block" />
+            <span className="text-accent-blue font-semibold">{normal}</span>
+            <span className="text-ink-muted">合理</span>
+          </span>
+        )}
+        {overvalued > 0 && (
+          <span className="flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-accent-red inline-block" />
+            <span className="text-accent-red font-semibold">{overvalued}</span>
+            <span className="text-ink-muted">高估</span>
+          </span>
+        )}
+        {unknown > 0 && (
+          <span className="flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-ink-muted inline-block" />
+            <span className="text-ink-muted">{unknown} 积累中</span>
+          </span>
+        )}
+      </div>
+      {undervalued > 0 && (
+        <span className="ml-auto text-accent-green animate-pulse">
+          ● {undervalued} 只低估，关注机会
+        </span>
+      )}
+    </div>
+  )
+}
+
 // ── 主页面 ────────────────────────────────────────────────────────
+
 export default function Watchlist() {
   const navigate    = useNavigate()
   const [showAdd, setShowAdd] = useState(false)
 
+  // 自选股行情数据
   const { data, loading, error, refetch } = useQuery(
     useCallback(() => fetchWatchlist(), []),
     { refetchInterval: 15_000 },
   )
 
+  // 估值汇总（读快照，不阻塞行情）
+  const { data: valSummary } = useQuery(
+    useCallback(() => fetchValuationSummary(), []),
+    { refetchInterval: 5 * 60_000 }, // 5 分钟刷新一次
+  )
+
   const items = data?.items ?? []
+
+  // 构建估值 map：code → ValuationSummaryItem
+  const valMap = new Map<string, ValuationSummaryItem>()
+  valSummary?.items.forEach(v => valMap.set(v.code, v))
 
   const handleAdd = async (code: string, note: string) => {
     await addToWatchlist(code, note)
@@ -119,7 +189,7 @@ export default function Watchlist() {
 
       <div className="flex-1 overflow-hidden flex flex-col p-5">
         {/* 操作栏 */}
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-3">
             {error && <ErrorBanner message={error} />}
             {!error && (
@@ -135,13 +205,30 @@ export default function Watchlist() {
           </button>
         </div>
 
+        {/* 估值汇总条 */}
+        {valSummary && (
+          <div className="mb-3">
+            <ValuationSummaryBar
+              undervalued={valSummary.undervalued}
+              normal={valSummary.normal}
+              overvalued={valSummary.overvalued}
+              unknown={valSummary.unknown}
+              total={valSummary.total}
+            />
+          </div>
+        )}
+
         {/* 表格 */}
         <div className="card overflow-hidden flex-1 flex flex-col">
           <div className="overflow-auto flex-1">
-            <table className="w-full text-sm min-w-[700px]">
+            <table className="w-full text-sm min-w-[900px]">
               <thead className="sticky top-0 bg-terminal-surface z-10">
                 <tr className="border-b border-terminal-border">
-                  {['代码', '名称', '最新价', '涨跌幅', '涨跌额', '成交量', '成交额', '换手率', '量比', '操作'].map(h => (
+                  {[
+                    '代码', '名称', '最新价', '涨跌幅', '涨跌额',
+                    '成交量', '成交额', '换手率', '量比',
+                    '估值分位', '操作',
+                  ].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-[11px] font-mono text-ink-muted uppercase tracking-wider whitespace-nowrap">
                       {h}
                     </th>
@@ -150,13 +237,15 @@ export default function Watchlist() {
               </thead>
               <tbody>
                 {loading && items.length === 0
-                  ? Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} cols={10} />)
+                  ? Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} cols={11} />)
                   : items.length === 0
-                    ? <tr><td colSpan={10}><EmptyState message="自选股为空，点击右上角「添加自选股」开始" /></td></tr>
+                    ? <tr><td colSpan={11}><EmptyState message="自选股为空，点击右上角「添加自选股」开始" /></td></tr>
                     : items.map(item => {
                         const q     = item.quote
                         const rate  = q?.change_rate ?? 0
                         const color = getPriceColor(rate)
+                        const val   = valMap.get(item.stock_code)
+
                         return (
                           <tr
                             key={item.id}
@@ -196,6 +285,32 @@ export default function Watchlist() {
                             <td className="px-4 py-3 font-mono text-sm text-ink-secondary">
                               {q ? q.volume_ratio.toFixed(2) : '—'}
                             </td>
+
+                            {/* ── 估值分位列 ─────────────────────── */}
+                            <td className="px-4 py-3 min-w-[140px]" onClick={e => e.stopPropagation()}>
+                              {val ? (
+                                <div
+                                  className="cursor-pointer"
+                                  onClick={() => navigate(`/stocks/${item.stock_code}`)}
+                                >
+                                  <ValuationBar
+                                    peTTM={val.pe_ttm}
+                                    pb={val.pb}
+                                    pePercentile={val.pe_percentile}
+                                    pbPercentile={val.pb_percentile}
+                                    historyDays={val.history_days}
+                                    status={val.status}
+                                    showPB={false}
+                                  />
+                                </div>
+                              ) : (
+                                <span className="text-[10px] font-mono text-ink-muted flex items-center gap-1">
+                                  <TrendingUp size={9} className="opacity-40" />
+                                  待同步
+                                </span>
+                              )}
+                            </td>
+
                             <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                               <button
                                 onClick={() => handleRemove(item.stock_code)}
