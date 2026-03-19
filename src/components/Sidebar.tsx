@@ -1,34 +1,32 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import {
-  LayoutDashboard,
-  Star,
-  ScrollText,
-  ScanLine,
-  Radar,
-  Shield,
-  Settings,
-  ChevronRight,
-  Brain,
-  Newspaper,
+  LayoutDashboard, Star, ScrollText, ScanLine, Radar,
+  Shield, Settings, ChevronRight, Brain, Newspaper,
+  Target, Sunrise, TrendingUp, Flame, ShieldAlert,
 } from 'lucide-react'
 
 const NAV_ITEMS = [
   {
     group: '市场',
     items: [
-      { to: '/',         icon: LayoutDashboard, label: '仪表盘',     badge: null   },
-      { to: '/watchlist', icon: Star,           label: '自选股',     badge: null   },
-      { to: '/scan',     icon: ScanLine,        label: '信号扫描',   badge: null   },
-      { to: '/radar',    icon: Radar,           label: '机会雷达',   badge: null   },
-      { to: '/intel',    icon: Newspaper,       label: '研报情报站', badge: 'NEW'  },
+      { to: '/',               icon: LayoutDashboard, label: '仪表盘',     badge: null  },
+      { to: '/morning-brief',  icon: Sunrise,         label: '开盘简报',   badge: null  },
+      { to: '/watchlist',      icon: Star,            label: '自选股',     badge: null  },
+      { to: '/buy-plans',      icon: Target,          label: '买入计划',   badge: null  },
+      { to: '/scan',           icon: ScanLine,        label: '信号扫描',   badge: null  },
+      { to: '/radar',          icon: Radar,           label: '机会雷达',   badge: null  },
+      { to: '/sector-heatmap', icon: Flame,           label: '板块热力',   badge: 'NEW' },
+      { to: '/intel',          icon: Newspaper,       label: '研报情报站', badge: null  },
     ],
   },
   {
     group: '账户',
     items: [
-      { to: '/guardian', icon: Shield,    label: '持仓守护', badge: null  },
-      { to: '/review',   icon: Brain,      label: '深度复盘', badge: 'AI'  },
-      { to: '/trades',   icon: ScrollText, label: '交易日志', badge: null  },
+      { to: '/guardian', icon: Shield,      label: '持仓守护', badge: null  },
+      { to: '/review',   icon: Brain,       label: '深度复盘', badge: 'AI'  },
+      { to: '/trades',   icon: ScrollText,  label: '交易日志', badge: null  },
+      { to: '/equity',      icon: TrendingUp,  label: '账户绩效', badge: 'NEW' },
+      { to: '/risk-center', icon: ShieldAlert,label: '风险中心', badge: 'NEW' },
     ],
   },
 ]
@@ -45,7 +43,7 @@ function SidebarLogo() {
         </div>
         <div className="min-w-0">
           <p className="text-ink-primary font-semibold text-sm leading-tight tracking-wide">A股分析</p>
-          <p className="text-ink-muted text-xs font-mono mt-0.5">TERMINAL v0.1</p>
+          <p className="text-ink-muted text-xs font-mono mt-0.5">TERMINAL v0.2</p>
         </div>
       </div>
     </div>

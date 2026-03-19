@@ -1,14 +1,27 @@
-import { useCallback } from 'react'
-import { AlertTriangle, Thermometer, TrendingUp, TrendingDown, DollarSign } from 'lucide-react'
+import { useCallback, useEffect } from 'react'
+import { AlertTriangle, Thermometer, TrendingUp, TrendingDown, DollarSign, RefreshCw } from 'lucide-react'
 import { useQuery } from '@/hooks/useQuery'
 import { fetchMarketSummary } from '@/api/stock'
 import { formatAmount } from '@/components/shared'
 
-export default function MarketSentimentBar() {
-  const { data, loading, error } = useQuery(
+interface Props {
+  /**
+   * 外部刷新触发器——每次仪表盘点「刷新」时把一个递增数字传进来，
+   * MarketSentimentBar 检测到变化后立即重新请求。
+   */
+  refreshTrigger?: number
+}
+
+export default function MarketSentimentBar({ refreshTrigger = 0 }: Props) {
+  const { data, loading, error, refetch } = useQuery(
     useCallback(() => fetchMarketSummary(), []),
-    { refetchInterval: 60_000 } // 每 60 秒轮询
+    { refetchInterval: 60_000 },
   )
+
+  // 外部 trigger 变化 → 立即刷新（trigger=0 是初始值，跳过）
+  useEffect(() => {
+    if (refreshTrigger > 0) refetch()
+  }, [refreshTrigger]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading && !data) {
     return (
@@ -25,15 +38,12 @@ export default function MarketSentimentBar() {
   if (error || !data) return null
 
   const { sentiment_score, total_amount, alert_status, daily_summary, up_count, down_count } = data
-  const isDanger = alert_status === 'DANGER'
-  const isWarning = alert_status === 'WARNING'
-  
-  // 7000亿
-  const isLowVolume = total_amount < 700000000000
+  const isDanger    = alert_status === 'DANGER'
+  const isWarning   = alert_status === 'WARNING'
+  const isLowVolume = total_amount < 700_000_000_000
 
   return (
     <div className="space-y-3 animate-fade-in">
-      {/* 全局风险告警 Banner */}
       {isDanger && (
         <div className="bg-accent-red/10 border border-accent-red/30 rounded-lg p-3 flex items-center gap-3 text-accent-red animate-pulse">
           <AlertTriangle size={18} className="flex-shrink-0" />
@@ -43,35 +53,44 @@ export default function MarketSentimentBar() {
         </div>
       )}
 
-      {/* 核心指标条 */}
       <div className={`card p-4 flex items-center gap-6 ${isDanger ? 'border-accent-red/40' : ''}`}>
-        
-        {/* 左侧：热度仪表盘 */}
+
+        {/* 热度仪表盘 */}
         <div className="flex-1 min-w-[200px]">
           <div className="flex items-center justify-between mb-1.5">
             <div className="flex items-center gap-2 text-ink-primary font-medium text-sm">
               <Thermometer size={14} className={sentiment_score > 50 ? 'text-accent-red' : 'text-accent-blue'} />
               <span>市场热度</span>
               <span className={`font-mono font-bold ${
-                sentiment_score > 70 ? 'text-accent-red' : 
-                sentiment_score < 30 ? 'text-accent-blue' : 'text-accent-amber'
+                sentiment_score > 70 ? 'text-accent-red'   :
+                sentiment_score < 30 ? 'text-accent-blue'  : 'text-accent-amber'
               }`}>
                 {sentiment_score}
               </span>
             </div>
-            <span className="text-xs text-ink-muted">{alert_status === 'SAFE' ? '情绪稳定' : alert_status}</span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-ink-muted">
+                {isDanger ? '极寒' : isWarning ? '偏弱' : '情绪稳定'}
+              </span>
+              <button
+                onClick={refetch}
+                disabled={loading}
+                title="刷新市场数据"
+                className="text-ink-muted hover:text-ink-primary transition-colors disabled:opacity-40"
+              >
+                <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
+              </button>
+            </div>
           </div>
-          
+
           {/* 渐变进度条 */}
           <div className="h-2 w-full bg-terminal-muted rounded-full overflow-hidden relative">
             <div className="absolute inset-0 bg-gradient-to-r from-blue-500 via-yellow-400 to-red-500 opacity-80" />
-            {/* 遮罩：露出当前进度 */}
-            <div 
+            <div
               className="absolute top-0 bottom-0 right-0 bg-terminal-muted transition-all duration-1000 ease-out"
               style={{ width: `${100 - sentiment_score}%` }}
             />
-            {/* 指示器 */}
-            <div 
+            <div
               className="absolute top-0 bottom-0 w-0.5 bg-white shadow-[0_0_8px_rgba(255,255,255,0.8)] z-10"
               style={{ left: `${sentiment_score}%` }}
             />
@@ -80,7 +99,7 @@ export default function MarketSentimentBar() {
 
         <div className="h-8 w-[1px] bg-terminal-border hidden md:block" />
 
-        {/* 中间：成交额 */}
+        {/* 成交额 */}
         <div className="flex flex-col items-start min-w-[120px]">
           <div className="flex items-center gap-1.5 text-xs text-ink-muted mb-0.5">
             <DollarSign size={12} />
@@ -98,7 +117,7 @@ export default function MarketSentimentBar() {
 
         <div className="h-8 w-[1px] bg-terminal-border hidden md:block" />
 
-        {/* 右侧：涨跌分布 */}
+        {/* 涨跌分布 */}
         <div className="flex items-center gap-4 text-xs">
           <div className="flex flex-col items-center">
             <span className="text-accent-red font-mono font-bold text-base flex items-center gap-1">
@@ -114,13 +133,10 @@ export default function MarketSentimentBar() {
           </div>
         </div>
 
-        {/* 简评文本 (大屏显示) */}
+        {/* 简评 */}
         <div className="ml-auto hidden lg:block max-w-[300px] text-right">
-          <p className="text-xs text-ink-muted leading-relaxed line-clamp-2">
-            {daily_summary}
-          </p>
+          <p className="text-xs text-ink-muted leading-relaxed line-clamp-2">{daily_summary}</p>
         </div>
-
       </div>
     </div>
   )

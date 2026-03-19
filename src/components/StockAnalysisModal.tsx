@@ -13,6 +13,7 @@ import {
   addToWatchlist, removeFromWatchlist, fetchWatchlist,
   addTrade,
 } from '@/api/stock'
+import { fetchDailyRiskState } from '@/api/risk'
 import { getPriceColor, formatPrice, formatRate } from '@/components/shared'
 import type { ScoredStock } from '@/types'
 
@@ -41,8 +42,16 @@ function QuickTradeForm({ code, name, price, onClose, onSuccess }: QuickTradeFor
   const [reason, setReason]   = useState('')
   const [loading, setLoading] = useState(false)
   const [err, setErr]         = useState('')
+  const { data: dailyRiskState } = useQuery(
+    useCallback(() => fetchDailyRiskState(), []),
+    { refetchInterval: 30_000 },
+  )
 
   const handleSubmit = async () => {
+    if (action === 'BUY' && dailyRiskState?.status === 'BLOCK') {
+      setErr(dailyRiskState.message || '当日风控熔断，仅限制买入开仓（卖出/减仓不受影响）')
+      return
+    }
     const vol = parseInt(volume, 10)
     if (!vol || vol <= 0) { setErr('手数必须大于 0'); return }
     setLoading(true)
@@ -117,10 +126,14 @@ function QuickTradeForm({ code, name, price, onClose, onSuccess }: QuickTradeFor
       </div>
 
       {err && <p className="text-accent-red text-xs font-mono">{err}</p>}
+      {!err && action === 'BUY' && dailyRiskState?.status === 'BLOCK' && (
+        <p className="text-accent-red text-xs font-mono">{dailyRiskState.message || '当日亏损触发熔断，仅限制买入开仓（卖出/减仓不受影响）'}</p>
+      )}
 
       <button
         onClick={handleSubmit}
-        disabled={loading}
+        disabled={loading || (action === 'BUY' && dailyRiskState?.status === 'BLOCK')}
+        title={action === 'BUY' && dailyRiskState?.status === 'BLOCK' ? (dailyRiskState.message || '当日风控熔断，仅限制买入开仓（卖出/减仓不受影响）') : undefined}
         className="w-full py-2 rounded-lg text-xs font-mono font-semibold bg-accent-cyan/10 border border-accent-cyan/30 text-accent-cyan hover:bg-accent-cyan/20 transition-colors disabled:opacity-40"
       >
         {loading ? <RefreshCw size={12} className="inline animate-spin mr-1" /> : null}

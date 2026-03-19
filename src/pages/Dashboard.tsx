@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Star, TrendingUp, TrendingDown, Activity, Database, ExternalLink } from 'lucide-react'
 import Topbar from '@/components/Topbar'
@@ -41,7 +41,7 @@ function WatchlistSnapshot() {
   const navigate = useNavigate()
   const { data, loading, error, refetch } = useQuery(
     useCallback(() => fetchWatchlist(), []),
-    { refetchInterval: 10_000 },
+    { refetchInterval: 15_000 },
   )
 
   const items = data?.items ?? []
@@ -148,9 +148,18 @@ function StockLibrary() {
 
 // ── 主页面 ────────────────────────────────────────────────────────
 export default function Dashboard() {
-  const { data: wlData, loading: wlLoading, refetch } = useQuery(
+  // refreshTick 每次点刷新 +1，通知所有子组件同步刷新
+  const [refreshTick, setRefreshTick] = useState(0)
+
+  const { data: wlData, loading: wlLoading, refetch: refetchWl } = useQuery(
     useCallback(() => fetchWatchlist(), []),
+    { refetchInterval: 15_000 },
   )
+
+  const handleRefresh = () => {
+    refetchWl()
+    setRefreshTick(t => t + 1)
+  }
 
   const items     = wlData?.items ?? []
   const upCount   = items.filter(i => (i.quote?.change_rate ?? 0) > 0).length
@@ -159,35 +168,35 @@ export default function Dashboard() {
 
   return (
     <div className="flex flex-col h-full">
-      <Topbar title="仪表盘" subtitle="个人 A 股分析系统" onRefresh={refetch} loading={wlLoading} />
+      <Topbar
+        title="仪表盘"
+        subtitle="个人 A 股分析系统"
+        onRefresh={handleRefresh}
+        loading={wlLoading}
+      />
 
       <div className="flex-1 overflow-y-auto p-5 space-y-5">
-        {/* 全市场宏观监控 */}
-        <MarketSentimentBar />
+        {/* 全市场宏观监控 — 接收 refreshTick，点刷新时同步更新 */}
+        <MarketSentimentBar refreshTrigger={refreshTick} />
 
         {/* 统计卡片行 */}
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-          <StatCard label="自选股"  value={String(items.length)} sub="只股票"       icon={Star}        color="text-accent-amber" />
-          <StatCard label="上涨"    value={String(upCount)}      sub={items.length > 0 ? `占比 ${Math.round(upCount   / items.length * 100)}%` : '—'} icon={TrendingUp}  color="text-accent-green" />
-          <StatCard label="下跌"    value={String(downCount)}    sub={items.length > 0 ? `占比 ${Math.round(downCount / items.length * 100)}%` : '—'} icon={TrendingDown} color="text-accent-red"   />
-          <StatCard label="总成交额" value={formatAmount(totalAmt)} sub="自选股合计" icon={Activity}     color="text-accent-cyan"  />
+          <StatCard label="自选股"   value={String(items.length)}    sub="只股票"       icon={Star}        color="text-accent-amber" />
+          <StatCard label="上涨"     value={String(upCount)}         sub={items.length > 0 ? `占比 ${Math.round(upCount   / items.length * 100)}%` : '—'} icon={TrendingUp}   color="text-accent-green" />
+          <StatCard label="下跌"     value={String(downCount)}       sub={items.length > 0 ? `占比 ${Math.round(downCount / items.length * 100)}%` : '—'} icon={TrendingDown} color="text-accent-red"   />
+          <StatCard label="总成交额" value={formatAmount(totalAmt)}  sub="自选股合计"   icon={Activity}     color="text-accent-cyan"  />
         </div>
 
         {/* 主内容区：三栏布局 */}
         <div className="grid grid-cols-1 xl:grid-cols-5 gap-5">
-
-          {/* 左侧 3/5：行情 + 股票库 */}
           <div className="xl:col-span-3 space-y-5">
             <WatchlistSnapshot />
             <StockLibrary />
           </div>
-
-          {/* 右侧 2/5：AI 复盘简报 + 主力脉冲告警（纵向堆叠） */}
           <div className="xl:col-span-2 space-y-5">
             <DailyReportView maxContentHeight={380} />
             <AlertPanel maxHeight={320} />
           </div>
-
         </div>
       </div>
     </div>

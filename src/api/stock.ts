@@ -21,8 +21,11 @@ export const fetchStockByCode = (code: string) =>
 export const fetchQuote = (code: string) =>
   http.get<ApiResponse<Quote>>(`/stocks/${code}/quote`)
 
-export const fetchKLine = (code: string, limit = 120) =>
-  http.get<ApiResponse<KLineResponse>>(`/stocks/${code}/kline`, { params: { limit } })
+export const fetchKLine = (code: string, limit = 120, source: 'em' | 'qq' = 'em') =>
+  http.get<ApiResponse<KLineResponse>>(`/stocks/${code}/kline`, { params: { limit, source } })
+
+export const fetchMinute = (code: string, days = 1) =>
+  http.get<ApiResponse<import('@/types').MinuteResponse>>(`/stocks/${code}/minute`, { params: { days } })
 
 export const fetchAnalysis = (code: string) =>
   http.get<ApiResponse<AnalysisResult>>(`/stocks/${code}/analysis`, {

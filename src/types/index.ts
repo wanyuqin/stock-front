@@ -197,57 +197,86 @@ export interface ScreenerStatus {
 export type SignalType = 'HOLD' | 'SELL' | 'BUY_T' | 'SELL_T' | 'STOP_LOSS'
 
 export interface DiagnosticSnapshot {
-  price: number
-  avg_cost: number
-  pnl_pct: number
-  atr: number
-  ma20: number
-  ma20_slope: number
-  support: number
-  resistance: number
-  hard_stop_loss: number
-  amplitude: number
-  can_do_t: boolean
-  reasons: string[]
-  // 板块相关性（从 SectorInfo 填充）
-  sector_name: string
-  sector_sec_id: string
-  sector_5d_change: number   // 板块今日涨跌幅
-  rel_strength_diff: number  // RS = 个股涨跌幅 - 板块涨跌幅
-  sector_warning: string
-  // MA20 压力位
-  ma20_dist_pct: number
+  // ── 基础行情 ────────────────────────────────────────────────────
+  price:         number
+  avg_cost:      number
+  pnl_pct:       number
+  atr:           number
+  ma20:          number
+  ma20_slope:    number
+  support:       number
+  resistance:    number
+  hard_stop_loss: number   // ATR 计算的系统止损位
+  amplitude:     number
+  can_do_t:      boolean
+  reasons:       string[]
+
+  // ── 买入计划继承字段 ─────────────────────────────────────────────
+  plan_stop_loss:     number | null  // 你在买入计划中设定的止损价（优先使用）
+  plan_target_price:  number | null  // 你在买入计划中设定的目标价
+  plan_buy_reason:    string         // 计划里的买入理由
+
+  // ── 持仓上下文 ────────────────────────────────────────────────
+  hold_days:   number   // 持仓天数，-1=未知
+  buy_reason:  string   // 手填买入理由
+
+  // ── 一句话行动指令（面向小白）────────────────────────────────────
+  action_summary:     string          // 如：继续持有，今天不操作
+  stop_dist_pct:      number          // 距止损还有多少%（正数）
+  target_dist_pct:    number | null   // 距目标还有多少%，null=无目标
+  near_stop_warning:  boolean         // 距止损 < 2%
+  near_target_notice: boolean         // 距目标 < 3%
+  suggest_qty:        number          // 建议操作股数
+
+  // ── 板块相关性 ────────────────────────────────────────────────
+  sector_name:       string
+  sector_sec_id:     string
+  sector_5d_change:  number
+  rel_strength_diff: number
+  sector_warning:    string
+
+  // ── MA20 压力位 ───────────────────────────────────────────────
+  ma20_dist_pct:     number
   ma20_pressure_tip: string
 }
 
 // SectorInfo 板块实时强度对比
 export interface SectorInfo {
-  sector_code: string            // BK0726
-  sector_name: string            // 印制电路板
-  sector_change_percent: number  // 板块今日涨跌幅（%）
-  relative_strength: number      // RS = 个股 - 板块
-  rs_label: string               // 强弱文字描述
-  rs_level: string               // "strong" | "normal" | "weak" | "critical"
+  sector_code:           string
+  sector_name:           string
+  sector_change_percent: number
+  relative_strength:     number
+  rs_label:              string
+  rs_level:              string
 }
 
 export interface PositionDetail {
-  id: number
-  stock_code: string
-  avg_cost: number
-  quantity: number
+  id:            number
+  stock_code:    string
+  avg_cost:      number
+  quantity:      number
   available_qty: number
   hard_stop_loss: number | null
-  updated_at: string
+  // 买入上下文
+  bought_at:   string | null   // ISO 时间
+  buy_reason:  string
+  // 关联买入计划
+  linked_plan_id:    number | null
+  plan_stop_loss:    number | null
+  plan_target_price: number | null
+  plan_buy_reason:   string
+  updated_at:  string
 }
 
 export interface PositionDiagnosisResult {
-  stock_code: string
-  stock_name: string
-  signal: SignalType
+  stock_code:       string
+  stock_name:       string
+  signal:           SignalType
   action_directive: string
-  snapshot: DiagnosticSnapshot
-  position: PositionDetail
-  updated_at: string
+  snapshot:         DiagnosticSnapshot
+  sector_info:      SectorInfo | null
+  position:         PositionDetail
+  updated_at:       string
 }
 
 export interface DiagnoseResponse {
@@ -256,17 +285,19 @@ export interface DiagnoseResponse {
 }
 
 export interface PositionAIResult {
-  stock_code: string
-  stock_name: string
+  stock_code:       string
+  stock_name:       string
   action_directive: string
-  generated_at: string
+  generated_at:     string
 }
 
 export interface SyncPositionRequest {
-  stock_code: string
-  avg_cost: number
-  quantity: number
+  stock_code:    string
+  avg_cost:      number
+  quantity:      number
   available_qty?: number
+  bought_at?:    string   // YYYY-MM-DD，留空=今天
+  buy_reason?:   string   // 买入理由
 }
 
 // ── 研报情报站 ────────────────────────────────────────────────────
@@ -304,26 +335,24 @@ export interface ReportSyncResult {
 // ── 估值分位 ──────────────────────────────────────────────────────
 
 export type ValuationStatus =
-  | 'undervalued'  // PE 分位 < 30，低估
-  | 'normal'       // 30 ≤ PE 分位 ≤ 70，合理
-  | 'overvalued'   // PE 分位 > 70，高估
-  | 'unknown'      // 历史数据不足（积累中）
-  | 'loss'         // PE 为负，亏损状态
+  | 'undervalued'
+  | 'normal'
+  | 'overvalued'
+  | 'unknown'
+  | 'loss'
 
-/** 单只股票估值快照（对应后端 /stocks/:code/valuation） */
 export interface StockValuation {
   code: string
   name: string
-  pe_ttm: number | null          // null = 亏损/无效
+  pe_ttm: number | null
   pb: number | null
-  pe_percentile: number | null   // null = 历史数据不足
+  pe_percentile: number | null
   pb_percentile: number | null
-  history_days: number           // 已积累历史天数
+  history_days: number
   status: ValuationStatus
   updated_at: string
 }
 
-/** 自选股池估值汇总（对应后端 /market/valuation-summary） */
 export interface ValuationSummaryItem {
   code: string
   name: string
@@ -360,7 +389,7 @@ export interface ListResponse<T> {
   offset?: number
 }
 
-// ── 大单分析 ──────────────────────────────────────────────
+// ── 大单分析 ──────────────────────────────────────────────────────
 
 export type TickSize = 'small' | 'medium' | 'large' | 'super'
 
@@ -394,6 +423,36 @@ export interface BigDealSummary {
   stats:               Record<TickSize, TickSizeStat>
   main_flow_pct:       number
   retail_flow_pct:     number
+  main_avg_cost:       number
+  main_avg_cost_desc:  string
+  surge_signal:        boolean
+  surge_multiplier:    number
+  surge_desc:          string
+  insight_desc:        string
   washing_signal:      boolean
   washing_signal_desc: string
+}
+
+// ── 分时数据（腾讯接口）────────────────────────────────────────────
+
+export interface MinuteBar {
+  time:       string
+  price:      number
+  volume:     number
+  amount:     number
+  avg_price:  number
+  cum_volume: number
+  cum_amount: number
+}
+
+export interface MinuteResponse {
+  code:      string
+  name:      string
+  date:      string
+  pre_close: number
+  bars:      MinuteBar[]
+  times:     string[]
+  prices:    number[]
+  volumes:   [number, number, number][]
+  amounts:   number[]
 }

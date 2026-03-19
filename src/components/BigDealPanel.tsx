@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import { RefreshCw, AlertTriangle, TrendingUp, TrendingDown, ShieldAlert } from 'lucide-react'
+import { RefreshCw, TrendingUp, TrendingDown, ShieldAlert, Zap, Target, DollarSign } from 'lucide-react'
 import { useQuery } from '@/hooks/useQuery'
 import { fetchBigDeal } from '@/api/stock'
 import { ErrorBanner } from '@/components/shared'
@@ -106,15 +106,32 @@ function SizeRow({ size, stat }: { size: TickSize; stat: TickSizeStat }) {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// 洗盘信号提示
+// 信号卡片（洗盘 / 异动 / 综合结论）
 // ─────────────────────────────────────────────────────────────────
 
-function WashingAlert({ desc }: { desc: string }) {
+type SignalCardVariant = 'warning' | 'surge' | 'insight' | 'cost'
+
+const SIGNAL_CARD_STYLE: Record<SignalCardVariant, { border: string; bg: string; iconColor: string }> = {
+  warning: { border: 'border-accent-amber/40',  bg: 'bg-accent-amber/5',  iconColor: 'text-accent-amber' },
+  surge:   { border: 'border-accent-cyan/40',   bg: 'bg-accent-cyan/5',   iconColor: 'text-accent-cyan'  },
+  insight: { border: 'border-accent-green/40',  bg: 'bg-accent-green/5',  iconColor: 'text-accent-green' },
+  cost:    { border: 'border-terminal-border',  bg: 'bg-terminal-muted/40', iconColor: 'text-ink-muted'  },
+}
+
+function SignalCard({
+  variant, icon: Icon, title, desc,
+}: {
+  variant: SignalCardVariant
+  icon: React.ElementType
+  title: string
+  desc: string
+}) {
+  const s = SIGNAL_CARD_STYLE[variant]
   return (
-    <div className="flex items-start gap-2 rounded-lg border border-accent-amber/40 bg-accent-amber/8 px-3 py-2">
-      <ShieldAlert size={14} className="text-accent-amber mt-0.5 flex-shrink-0" />
+    <div className={`flex items-start gap-2 rounded-lg border ${s.border} ${s.bg} px-3 py-2`}>
+      <Icon size={13} className={`${s.iconColor} mt-0.5 flex-shrink-0`} />
       <div className="min-w-0">
-        <p className="text-[11px] font-semibold text-accent-amber">⚠️ 疑似主力洗盘吸筹</p>
+        <p className={`text-[11px] font-semibold ${s.iconColor}`}>{title}</p>
         <p className="text-[10px] font-mono text-ink-muted mt-0.5 leading-relaxed">{desc}</p>
       </div>
     </div>
@@ -127,11 +144,12 @@ function WashingAlert({ desc }: { desc: string }) {
 
 interface BigDealPanelProps {
   code: string
-  changeRate?: number   // 实时涨跌幅，用于洗盘判断
-  compact?: boolean     // K 线下方嵌入时用紧凑模式
+  changeRate?: number
+  compact?: boolean
+  onDataLoaded?: (data: BigDealSummary) => void  // 数据就绪时回调给父组件
 }
 
-export default function BigDealPanel({ code, changeRate, compact = false }: BigDealPanelProps) {
+export default function BigDealPanel({ code, changeRate, compact = false, onDataLoaded }: BigDealPanelProps) {
   // key 控制重新请求（按需刷新）
   const [fetchKey, setFetchKey] = useState(0)
   const [lastFetchTime, setLastFetchTime] = useState<Date | null>(null)
@@ -143,6 +161,7 @@ export default function BigDealPanel({ code, changeRate, compact = false }: BigD
       // eslint-disable-next-line react-hooks/exhaustive-deps
       [code, fetchKey],
     ),
+    { onSuccess: onDataLoaded },
   )
 
   const handleRefresh = () => {
@@ -189,8 +208,14 @@ export default function BigDealPanel({ code, changeRate, compact = false }: BigD
   }
 
   // ── 数据已加载 ──
-  const { main_flow_pct, retail_flow_pct, main_net_flow, stats,
-          washing_signal, washing_signal_desc, time, desc } = data
+  const {
+    main_flow_pct, retail_flow_pct, main_net_flow, stats,
+    washing_signal, washing_signal_desc,
+    main_avg_cost, main_avg_cost_desc,
+    surge_signal, surge_desc,
+    insight_desc,
+    time, desc,
+  } = data
 
   const pieSegments: PieSegment[] = [
     { pct: main_flow_pct,   color: '#f97316', label: '主力' },
@@ -224,14 +249,42 @@ export default function BigDealPanel({ code, changeRate, compact = false }: BigD
         </button>
       </div>
 
-      {/* 洗盘信号 */}
-      {washing_signal && <WashingAlert desc={washing_signal_desc} />}
+      {/* ── AnalysisEngine 信号区 ── */}
+
+      {/* 维度 3：特大单净流入+价格区间综合结论（最显眼，放在最顶） */}
+      {insight_desc && insight_desc !== '今日暂无特大单数据' && (
+        <SignalCard
+          variant="insight"
+          icon={Target}
+          title="特大单净流向"
+          desc={insight_desc}
+        />
+      )}
+
+      {/* 维度 2：大单频率异动 */}
+      {surge_signal && (
+        <SignalCard
+          variant="surge"
+          icon={Zap}
+          title="⚡ 大单扫货加速"
+          desc={surge_desc}
+        />
+      )}
+
+      {/* 风险雷达：洗盘信号 */}
+      {washing_signal && (
+        <SignalCard
+          variant="warning"
+          icon={ShieldAlert}
+          title="⚠️ 疑似主力洗盘吸筹"
+          desc={washing_signal_desc}
+        />
+      )}
 
       {/* 饼图 + 主力净流入 */}
       <div className="flex items-center gap-4">
         <DonutPie segments={pieSegments} />
         <div className="flex-1 space-y-2">
-          {/* 图例 */}
           {pieSegments.map(seg => (
             <div key={seg.label} className="flex items-center gap-1.5">
               <div className="w-2 h-2 rounded-sm flex-shrink-0" style={{ background: seg.color }} />
@@ -241,7 +294,6 @@ export default function BigDealPanel({ code, changeRate, compact = false }: BigD
               </span>
             </div>
           ))}
-          {/* 主力净流入 */}
           <div className="pt-1 border-t border-terminal-border/50">
             <p className="text-[9px] font-mono text-ink-muted">主力净流入</p>
             <p className={`text-sm font-mono font-bold ${netFlowColor(main_net_flow)}`}>
@@ -253,6 +305,16 @@ export default function BigDealPanel({ code, changeRate, compact = false }: BigD
           </div>
         </div>
       </div>
+
+      {/* 维度 1：主力建仓加权平均成本 */}
+      {main_avg_cost > 0 && (
+        <SignalCard
+          variant="cost"
+          icon={DollarSign}
+          title="主力建仓成本"
+          desc={main_avg_cost_desc}
+        />
+      )}
 
       {/* 各量级详情 */}
       {stats && (

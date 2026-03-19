@@ -8,9 +8,10 @@ interface AIReportPanelProps {
   loading: boolean
   error: string | null
   onRefresh: () => void
+  smartSummary?: string  // 大单模块异步生成的一句话判定
 }
 
-export default function AIReportPanel({ data, loading, error, onRefresh }: AIReportPanelProps) {
+export default function AIReportPanel({ data, loading, error, onRefresh, smartSummary }: AIReportPanelProps) {
   return (
     <div className="flex flex-col h-full">
       {/* 面板头部 */}
@@ -44,12 +45,32 @@ export default function AIReportPanel({ data, loading, error, onRefresh }: AIRep
 
       {/* 内容区 */}
       <div className="flex-1 overflow-y-auto">
+        {/* 未触发状态：显示生成按鈕 */}
+        {!data && !loading && !error && (
+          <div className="flex flex-col items-center justify-center h-full gap-4 px-6 py-12">
+            <div className="w-12 h-12 rounded-xl bg-terminal-muted border border-terminal-border flex items-center justify-center">
+              <Brain size={22} className="text-ink-muted" strokeWidth={1.5} />
+            </div>
+            <div className="text-center space-y-1">
+              <p className="text-sm font-medium text-ink-primary">AI 深度分析</p>
+              <p className="text-[11px] text-ink-muted leading-relaxed">基于实时行情、技术面、资金面生成综合报告</p>
+            </div>
+            <button
+              onClick={onRefresh}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent-cyan/10 border border-accent-cyan/30 text-accent-cyan text-sm font-mono hover:bg-accent-cyan/20 transition-all"
+            >
+              <Brain size={13} />
+              生成 AI 分析
+            </button>
+          </div>
+        )}
+
         {loading && !data && (
           <AILoadingSkeleton />
         )}
 
         {error && !data && (
-          <div className="p-4">
+          <div className="p-4 space-y-3">
             <div className="flex items-start gap-3 p-3 rounded-lg bg-accent-red/10 border border-accent-red/20">
               <span className="text-accent-red text-base mt-0.5">⚠</span>
               <div>
@@ -57,11 +78,24 @@ export default function AIReportPanel({ data, loading, error, onRefresh }: AIRep
                 <p className="text-ink-muted text-xs">{error}</p>
               </div>
             </div>
+            <button
+              onClick={onRefresh}
+              className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-terminal-border text-ink-muted text-xs font-mono hover:text-ink-primary hover:border-ink-muted transition-all"
+            >
+              <RefreshCw size={11} />重试
+            </button>
           </div>
         )}
 
         {data && (
           <div className="p-4 animate-fade-in">
+            {/* 大单智能总结（异步展示，不阻塞 AI 报告） */}
+            {smartSummary && (
+              <div className="flex items-start gap-2 mb-4 rounded-lg border border-orange-500/30 bg-orange-500/8 px-3 py-2">
+                <span className="text-orange-400 text-xs mt-0.5 flex-shrink-0">⚡</span>
+                <p className="text-[11px] font-mono text-orange-200 leading-relaxed">{smartSummary}</p>
+              </div>
+            )}
             {/* 生成时间 */}
             <p className="text-[11px] font-mono text-ink-muted mb-4 flex items-center gap-1.5">
               <Clock size={10} />

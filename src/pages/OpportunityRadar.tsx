@@ -2,11 +2,12 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import {
   Radar, RefreshCw, Zap, TrendingUp, TrendingDown,
   ArrowUpDown, CheckCircle2, Clock, BarChart2,
-  Banknote, Activity, ChevronUp, ChevronDown,
-  Moon,
+  Banknote, Activity, ChevronUp, ChevronDown, Moon,
+  BookmarkPlus, Layers,
 } from 'lucide-react'
 import Topbar from '@/components/Topbar'
 import StockAnalysisModal from '@/components/StockAnalysisModal'
+import TemplatePanel from '@/components/TemplatePanel'
 import { useQuery } from '@/hooks/useQuery'
 import {
   executeScreener, syncMarketData, fetchScreenerStatus,
@@ -15,7 +16,6 @@ import { getPriceColor, formatRate } from '@/components/shared'
 import type { ScoredStock, ScreenerResult } from '@/types'
 
 // ── 工具函数 ──────────────────────────────────────────────────────
-
 function formatYuan(v: number) {
   const abs = Math.abs(v)
   const sign = v >= 0 ? '+' : '-'
@@ -26,7 +26,6 @@ function formatYuan(v: number) {
 function formatPrice(p: number) { return p.toFixed(2) }
 
 // ── 评分圆环 ──────────────────────────────────────────────────────
-
 function ScoreRing({ score }: { score: number }) {
   const r    = 22
   const circ = 2 * Math.PI * r
@@ -59,7 +58,6 @@ function ScoreRing({ score }: { score: number }) {
 }
 
 // ── 机会卡片 ──────────────────────────────────────────────────────
-
 interface OpportunityCardProps {
   stock: ScoredStock
   rank: number
@@ -94,12 +92,9 @@ function OpportunityCard({ stock, rank, onClick }: OpportunityCardProps) {
           <p className="text-sm font-semibold text-ink-primary truncate">{stock.name}</p>
           <p className="text-[11px] font-mono text-ink-muted">{stock.code}</p>
           <div className="flex items-center gap-2 mt-1">
-            <span className={`text-base font-mono font-bold ${priceColor}`}>
-              {formatPrice(stock.price)}
-            </span>
+            <span className={`text-base font-mono font-bold ${priceColor}`}>{formatPrice(stock.price)}</span>
             <span className={`flex items-center gap-0.5 text-xs font-mono ${priceColor}`}>
-              <TrendIcon size={11} />
-              {formatRate(stock.pct_chg)}
+              <TrendIcon size={11} />{formatRate(stock.pct_chg)}
             </span>
           </div>
         </div>
@@ -107,17 +102,15 @@ function OpportunityCard({ stock, rank, onClick }: OpportunityCardProps) {
 
       <div className="flex flex-wrap gap-1 mb-3 min-h-[22px]">
         {(stock.tags ?? []).map(tag => (
-          <span key={tag} className={`px-1.5 py-0.5 text-[10px] font-mono rounded border ${tagStyle(tag)}`}>
-            {tag}
-          </span>
+          <span key={tag} className={`px-1.5 py-0.5 text-[10px] font-mono rounded border ${tagStyle(tag)}`}>{tag}</span>
         ))}
       </div>
 
       <div className="grid grid-cols-3 gap-1 mb-3 text-center">
         {[
           { label: '主力占比', value: `${stock.main_inflow_pct.toFixed(1)}%`, color: stock.main_inflow_pct > 0 ? 'text-accent-green' : 'text-accent-red' },
-          { label: '主力净入', value: formatYuan(stock.main_inflow),          color: stock.main_inflow > 0   ? 'text-accent-green' : 'text-accent-red' },
-          { label: '量比',     value: stock.vol_ratio.toFixed(2),             color: stock.vol_ratio > 1.5   ? 'text-accent-amber' : 'text-ink-secondary' },
+          { label: '主力净入', value: formatYuan(stock.main_inflow),           color: stock.main_inflow > 0   ? 'text-accent-green' : 'text-accent-red' },
+          { label: '量比',     value: stock.vol_ratio.toFixed(2),              color: stock.vol_ratio > 1.5   ? 'text-accent-amber' : 'text-ink-secondary' },
         ].map(({ label, value, color }) => (
           <div key={label} className="bg-terminal-muted/60 rounded-lg py-1.5 px-1">
             <p className={`text-xs font-mono font-semibold ${color}`}>{value}</p>
@@ -128,26 +121,21 @@ function OpportunityCard({ stock, rank, onClick }: OpportunityCardProps) {
 
       <button className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-[11px] font-mono
         bg-accent-cyan/5 border border-accent-cyan/20 text-accent-cyan/70
-        group-hover:bg-accent-cyan/15 group-hover:border-accent-cyan/40 group-hover:text-accent-cyan
-        transition-all duration-200">
-        <Zap size={11} />
-        查看 AI 研报
+        group-hover:bg-accent-cyan/15 group-hover:border-accent-cyan/40 group-hover:text-accent-cyan transition-all duration-200">
+        <Zap size={11} /> 查看 AI 研报
       </button>
     </div>
   )
 }
 
-// ── ScanProgress 组件 ─────────────────────────────────────────────
-
-interface ScanProgressProps {
-  onComplete: () => void
-}
+// ── ScanProgress ──────────────────────────────────────────────────
+interface ScanProgressProps { onComplete: () => void }
 
 function ScanProgress({ onComplete }: ScanProgressProps) {
-  const [synced,   setSynced]   = useState(0)
-  const [total,    setTotal]    = useState(5000)
-  const [phase,    setPhase]    = useState<'sync' | 'score' | 'done'>('sync')
-  const [elapsed,  setElapsed]  = useState(0)
+  const [synced, setSynced] = useState(0)
+  const [total,  setTotal]  = useState(5000)
+  const [phase,  setPhase]  = useState<'sync' | 'score' | 'done'>('sync')
+  const [elapsed, setElapsed] = useState(0)
   const timerRef     = useRef<ReturnType<typeof setInterval> | null>(null)
   const startRef     = useRef(Date.now())
   const completedRef = useRef(false)
@@ -193,11 +181,6 @@ function ScanProgress({ onComplete }: ScanProgressProps) {
     phase === 'score' ? 95  :
     Math.min((synced / total) * 90, 90)
 
-  const phaseLabel =
-    phase === 'sync'  ? `正在同步全市场数据… ${synced} / ${total}` :
-    phase === 'score' ? '正在并行打分中…' :
-    '扫描完成！'
-
   return (
     <div className="bg-terminal-panel border border-terminal-border rounded-xl p-5 space-y-4">
       <div className="flex items-center justify-between">
@@ -207,7 +190,6 @@ function ScanProgress({ onComplete }: ScanProgressProps) {
         </div>
         <span className="text-xs font-mono text-ink-muted">{elapsed}s</span>
       </div>
-
       <div className="space-y-1.5">
         <div className="h-2 bg-terminal-muted rounded-full overflow-hidden">
           <div
@@ -216,60 +198,31 @@ function ScanProgress({ onComplete }: ScanProgressProps) {
           />
         </div>
         <div className="flex justify-between items-center">
-          <span className="text-xs font-mono text-ink-muted">{phaseLabel}</span>
+          <span className="text-xs font-mono text-ink-muted">
+            {phase === 'sync' ? `正在同步全市场数据… ${synced} / ${total}` :
+             phase === 'score' ? '正在并行打分中…' : '扫描完成！'}
+          </span>
           <span className="text-xs font-mono text-ink-muted">{Math.round(progress)}%</span>
         </div>
-      </div>
-
-      <div className="flex items-center gap-4">
-        {[
-          { key: 'sync',  label: '数据同步', icon: RefreshCw   },
-          { key: 'score', label: '并行打分', icon: BarChart2   },
-          { key: 'done',  label: '完成',     icon: CheckCircle2 },
-        ].map(({ key, label, icon: Icon }, idx) => {
-          const phases   = ['sync', 'score', 'done']
-          const phaseIdx = phases.indexOf(phase)
-          const stepIdx  = phases.indexOf(key)
-          const isDone   = stepIdx < phaseIdx || phase === 'done'
-          const isActive = stepIdx === phaseIdx && phase !== 'done'
-          return (
-            <div key={key} className="flex items-center gap-1.5">
-              {idx > 0 && <div className={`w-6 h-px ${isDone ? 'bg-accent-green/50' : 'bg-terminal-border'}`} />}
-              <Icon size={12} className={isDone ? 'text-accent-green' : isActive ? 'text-accent-cyan animate-pulse' : 'text-ink-muted'} />
-              <span className={`text-[11px] font-mono ${isDone ? 'text-accent-green' : isActive ? 'text-accent-cyan' : 'text-ink-muted'}`}>
-                {label}
-              </span>
-            </div>
-          )
-        })}
       </div>
     </div>
   )
 }
 
 // ── 排序控制 ──────────────────────────────────────────────────────
-
 type SortKey = 'score' | 'main_inflow' | 'pct_chg'
 type SortDir = 'desc' | 'asc'
 
-interface SortButtonProps {
-  label: string
-  sortKey: SortKey
-  icon: React.ElementType
-  current: SortKey
-  dir: SortDir
-  onChange: (k: SortKey) => void
-}
-
-function SortButton({ label, sortKey, icon: Icon, current, dir, onChange }: SortButtonProps) {
+function SortButton({ label, sortKey, icon: Icon, current, dir, onChange }: {
+  label: string; sortKey: SortKey; icon: React.ElementType
+  current: SortKey; dir: SortDir; onChange: (k: SortKey) => void
+}) {
   const active = current === sortKey
   return (
-    <button
-      onClick={() => onChange(sortKey)}
+    <button onClick={() => onChange(sortKey)}
       className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono border transition-all ${
-        active
-          ? 'bg-accent-cyan/10 border-accent-cyan/30 text-accent-cyan'
-          : 'border-terminal-border text-ink-muted hover:text-ink-secondary hover:border-terminal-border/80'
+        active ? 'bg-accent-cyan/10 border-accent-cyan/30 text-accent-cyan' :
+        'border-terminal-border text-ink-muted hover:text-ink-secondary hover:border-terminal-border/80'
       }`}
     >
       <Icon size={11} />
@@ -280,27 +233,21 @@ function SortButton({ label, sortKey, icon: Icon, current, dir, onChange }: Sort
 }
 
 // ── 主页面 ────────────────────────────────────────────────────────
-
 export default function OpportunityRadar() {
   const [minScore,       setMinScore]       = useState(40)
   const [sortKey,        setSortKey]        = useState<SortKey>('score')
   const [sortDir,        setSortDir]        = useState<SortDir>('desc')
   const [scanning,       setScanning]       = useState(false)
   const [syncError,      setSyncError]      = useState('')
-  // 非交易时段：接口返回空数据时给出友好提示（非错误）
   const [nonTrading,     setNonTrading]     = useState(false)
   const [nonTradingNote, setNonTradingNote] = useState('')
   const [selectedStock,  setSelectedStock]  = useState<ScoredStock | null>(null)
   const [refetchKey,     setRefetchKey]     = useState(0)
+  const [showTemplates,  setShowTemplates]  = useState(false)
 
-  const {
-    data: result, loading, error, refetch,
-  } = useQuery(
-    useCallback(
-      () => executeScreener({ min_score: minScore, limit: 100 }),
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-      [minScore, refetchKey],
-    ),
+  const { data: result, loading, error, refetch } = useQuery(
+    useCallback(() => executeScreener({ min_score: minScore, limit: 100 }), // eslint-disable-line react-hooks/exhaustive-deps
+    [minScore, refetchKey]),
   )
 
   const handleSort = (key: SortKey) => {
@@ -316,7 +263,6 @@ export default function OpportunityRadar() {
     return sortDir === 'desc' ? -diff : diff
   })
 
-  // 触发全市场同步
   const handleStartScan = async () => {
     setSyncError('')
     setNonTrading(false)
@@ -326,12 +272,10 @@ export default function OpportunityRadar() {
       const res = await syncMarketData()
       const payload = res.data.data
       if (payload.non_trading) {
-        // 非交易时段：接口正常，但没有数据，不是报错
         setNonTrading(true)
         setNonTradingNote(payload.notice || '当前为非交易时段，行情数据暂不可用')
         setScanning(false)
       }
-      // 如果 synced > 0，由 ScanProgress 内部轮询完成后触发 handleScanComplete
     } catch (e) {
       setSyncError(e instanceof Error ? e.message : '同步请求失败，请检查网络后重试')
       setScanning(false)
@@ -352,58 +296,24 @@ export default function OpportunityRadar() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <Topbar
-        title="机会雷达"
-        subtitle="全市场多因子量化筛选"
-        onRefresh={refetch}
-        loading={loading}
-      />
+      <Topbar title="机会雷达" subtitle="全市场多因子量化筛选" onRefresh={refetch} loading={loading} />
 
       <div className="flex-1 overflow-y-auto p-5 space-y-5 min-h-0">
-
-        {/* ── 扫描进度条 ───────────────────────────────────────── */}
         {scanning && <ScanProgress onComplete={handleScanComplete} />}
 
-        {/* ── 概览卡片行 ───────────────────────────────────────── */}
+        {/* 概览卡片行 */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <button
-            onClick={handleStartScan}
-            disabled={scanning}
-            className="flex flex-col items-center justify-center gap-2 p-4 rounded-xl border border-dashed
-              border-accent-cyan/30 bg-accent-cyan/5 hover:bg-accent-cyan/10 hover:border-accent-cyan/50
-              transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed group col-span-2 lg:col-span-1"
-          >
-            {scanning
-              ? <RefreshCw size={22} className="text-accent-cyan animate-spin" />
-              : <Radar size={22} className="text-accent-cyan group-hover:scale-110 transition-transform" />
-            }
-            <span className="text-xs font-mono text-accent-cyan">
-              {scanning ? '扫描中…' : '开始全市场雷达扫描'}
-            </span>
+          <button onClick={handleStartScan} disabled={scanning}
+            className="flex flex-col items-center justify-center gap-2 p-4 rounded-xl border border-dashed border-accent-cyan/30 bg-accent-cyan/5 hover:bg-accent-cyan/10 hover:border-accent-cyan/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed group col-span-2 lg:col-span-1">
+            {scanning ? <RefreshCw size={22} className="text-accent-cyan animate-spin" /> :
+              <Radar size={22} className="text-accent-cyan group-hover:scale-110 transition-transform" />}
+            <span className="text-xs font-mono text-accent-cyan">{scanning ? '扫描中…' : '开始全市场雷达扫描'}</span>
           </button>
 
           {[
-            {
-              label: '全市场快照',
-              value: stats ? stats.total.toLocaleString() : '—',
-              sub:   stats ? '今日已同步' : '点击扫描以加载',
-              icon:  BarChart2,
-              color: 'text-accent-cyan',
-            },
-            {
-              label: '高分机会',
-              value: stats ? `${stats.high} 只` : '—',
-              sub:   stats ? `≥70分 / 共 ${stats.matched} 只达标` : '—',
-              icon:  Zap,
-              color: 'text-accent-amber',
-            },
-            {
-              label: '打分耗时',
-              value: stats ? `${stats.elapsed}ms` : '—',
-              sub:   '服务端并行打分',
-              icon:  Clock,
-              color: 'text-accent-green',
-            },
+            { label: '全市场快照', value: stats ? stats.total.toLocaleString() : '—', sub: stats ? '今日已同步' : '点击扫描以加载', icon: BarChart2, color: 'text-accent-cyan' },
+            { label: '高分机会',   value: stats ? `${stats.high} 只` : '—', sub: stats ? `≥70分 / 共 ${stats.matched} 只达标` : '—', icon: Zap, color: 'text-accent-amber' },
+            { label: '打分耗时',   value: stats ? `${stats.elapsed}ms` : '—', sub: '服务端并行打分', icon: Clock, color: 'text-accent-green' },
           ].map(({ label, value, sub, icon: Icon, color }) => (
             <div key={label} className="flex items-center gap-3 p-4 bg-terminal-panel border border-terminal-border rounded-xl">
               <Icon size={20} className={`${color} flex-shrink-0`} strokeWidth={1.5} />
@@ -416,54 +326,51 @@ export default function OpportunityRadar() {
           ))}
         </div>
 
-        {/* ── 非交易时段提示（友好，非红色报错）─────────────────── */}
         {nonTrading && (
-          <div className="flex items-start gap-3 px-4 py-3 rounded-xl
-            bg-accent-amber/5 border border-accent-amber/25">
+          <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-accent-amber/5 border border-accent-amber/25">
             <Moon size={15} className="text-accent-amber flex-shrink-0 mt-0.5" />
             <div>
               <p className="text-xs font-semibold text-accent-amber mb-0.5">非交易时段</p>
               <p className="text-xs font-mono text-ink-muted">{nonTradingNote}</p>
-              <p className="text-[10px] text-ink-muted/60 mt-1">
-                可使用昨日或上一交易日的历史快照进行筛选分析。
-              </p>
             </div>
           </div>
         )}
 
-        {/* ── 网络/系统错误提示（红色）────────────────────────────── */}
         {syncError && (
-          <div className="flex items-center gap-2 px-4 py-2.5
-            bg-accent-red/10 border border-accent-red/30 rounded-lg
-            text-accent-red text-xs font-mono">
-            <span>⚠</span>
-            <span>{syncError}</span>
-            <button
-              onClick={() => setSyncError('')}
-              className="ml-auto text-accent-red/60 hover:text-accent-red transition-colors"
-            >✕</button>
+          <div className="flex items-center gap-2 px-4 py-2.5 bg-accent-red/10 border border-accent-red/30 rounded-lg text-accent-red text-xs font-mono">
+            <span>⚠</span><span>{syncError}</span>
+            <button onClick={() => setSyncError('')} className="ml-auto text-accent-red/60 hover:text-accent-red">✕</button>
           </div>
         )}
 
-        {/* ── 控制栏 ───────────────────────────────────────────── */}
+        {/* 控制栏 */}
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-2">
             <span className="text-xs font-mono text-ink-muted">最低分</span>
             {[0, 20, 40, 60, 70].map(v => (
-              <button
-                key={v}
-                onClick={() => setMinScore(v)}
+              <button key={v} onClick={() => setMinScore(v)}
                 className={`px-2.5 py-1 rounded text-xs font-mono border transition-all ${
-                  minScore === v
-                    ? 'bg-accent-cyan/15 border-accent-cyan/40 text-accent-cyan'
-                    : 'border-terminal-border text-ink-muted hover:text-ink-secondary'
-                }`}
-              >
+                  minScore === v ? 'bg-accent-cyan/15 border-accent-cyan/40 text-accent-cyan' :
+                  'border-terminal-border text-ink-muted hover:text-ink-secondary'
+                }`}>
                 {v === 0 ? '全部' : `${v}+`}
               </button>
             ))}
           </div>
+
           <div className="flex items-center gap-2">
+            {/* 筛选模板按钮 */}
+            <button
+              onClick={() => setShowTemplates(v => !v)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono border transition-all ${
+                showTemplates
+                  ? 'bg-accent-amber/10 border-accent-amber/30 text-accent-amber'
+                  : 'border-terminal-border text-ink-muted hover:text-ink-secondary'
+              }`}
+            >
+              <Layers size={11} /> 筛选模板
+            </button>
+
             <ArrowUpDown size={12} className="text-ink-muted" />
             <SortButton label="评分"     sortKey="score"       icon={BarChart2} current={sortKey} dir={sortDir} onChange={handleSort} />
             <SortButton label="主力净入" sortKey="main_inflow" icon={Banknote}  current={sortKey} dir={sortDir} onChange={handleSort} />
@@ -471,7 +378,23 @@ export default function OpportunityRadar() {
           </div>
         </div>
 
-        {/* ── 结果摘要 ─────────────────────────────────────────── */}
+        {/* 模板管理面板（折叠） */}
+        {showTemplates && (
+          <div className="card p-4">
+            <TemplatePanel />
+          </div>
+        )}
+
+        {/* 保存当前条件为模板 */}
+        {!showTemplates && (
+          <div className="flex items-center gap-2">
+            <button onClick={() => setShowTemplates(true)}
+              className="flex items-center gap-1 text-[11px] font-mono text-ink-muted hover:text-accent-amber transition-colors">
+              <BookmarkPlus size={11} /> 将当前条件保存为模板
+            </button>
+          </div>
+        )}
+
         {result && (
           <p className="text-xs font-mono text-ink-muted">
             全市场扫描完成，共发现{' '}
@@ -479,13 +402,10 @@ export default function OpportunityRadar() {
             只高分机会股（≥70分），当前显示{' '}
             <span className="text-ink-secondary">{sortedItems.length}</span>{' '}
             只（最低 {minScore} 分）
-            {result.elapsed_ms > 0 && (
-              <span className="ml-2 text-ink-muted/50">· 打分耗时 {result.elapsed_ms}ms</span>
-            )}
+            {result.elapsed_ms > 0 && <span className="ml-2 text-ink-muted/50">· 打分耗时 {result.elapsed_ms}ms</span>}
           </p>
         )}
 
-        {/* ── Skeleton ─────────────────────────────────────────── */}
         {loading && !result && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {Array.from({ length: 8 }).map((_, i) => (
@@ -494,60 +414,34 @@ export default function OpportunityRadar() {
           </div>
         )}
 
-        {/* ── 无结果空态 ───────────────────────────────────────── */}
         {!loading && !error && sortedItems.length === 0 && result && (
           <div className="flex flex-col items-center justify-center py-20 text-ink-muted gap-3">
             <Radar size={36} strokeWidth={1} className="opacity-30" />
             <p className="text-sm font-mono">未发现符合条件的机会股</p>
             <p className="text-xs text-ink-muted/60">
-              {result.total === 0
-                ? '今日快照为空，请先点击"开始全市场雷达扫描"同步数据'
-                : `当前最低分 ${minScore}，共 ${result.total} 只股票，无符合条件`
-              }
+              {result.total === 0 ? '今日快照为空，请先点击扫描' : `当前最低分 ${minScore}，无符合条件`}
             </p>
-            {result.total === 0 && (
-              <button
-                onClick={handleStartScan}
-                disabled={scanning}
-                className="mt-2 px-4 py-2 rounded-lg text-xs font-mono bg-accent-cyan/10 border border-accent-cyan/30 text-accent-cyan hover:bg-accent-cyan/20 transition-colors disabled:opacity-40"
-              >
-                立即同步
-              </button>
-            )}
           </div>
         )}
 
-        {/* ── fetch 错误 ───────────────────────────────────────── */}
         {error && !loading && (
-          <div className="flex flex-col items-center justify-center py-12 gap-3 text-ink-muted">
+          <div className="flex flex-col items-center justify-center py-12 gap-3">
             <p className="text-accent-red text-sm font-mono">⚠ {error}</p>
-            <button onClick={refetch} className="text-xs font-mono text-accent-cyan hover:underline">
-              重试
-            </button>
+            <button onClick={refetch} className="text-xs font-mono text-accent-cyan hover:underline">重试</button>
           </div>
         )}
 
-        {/* ── 机会卡片 Grid ─────────────────────────────────────── */}
         {sortedItems.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {sortedItems.map((stock, idx) => (
-              <OpportunityCard
-                key={stock.code}
-                stock={stock}
-                rank={idx + 1}
-                onClick={() => setSelectedStock(stock)}
-              />
+              <OpportunityCard key={stock.code} stock={stock} rank={idx + 1} onClick={() => setSelectedStock(stock)} />
             ))}
           </div>
         )}
       </div>
 
-      {/* ── AI 分析弹窗 ───────────────────────────────────────────── */}
       {selectedStock && (
-        <StockAnalysisModal
-          stock={selectedStock}
-          onClose={() => setSelectedStock(null)}
-        />
+        <StockAnalysisModal stock={selectedStock} onClose={() => setSelectedStock(null)} />
       )}
     </div>
   )
