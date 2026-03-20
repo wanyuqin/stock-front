@@ -23,7 +23,6 @@ import {
 } from '@/api/stock'
 import { fetchBuyPlansByCode } from '@/api/buyPlan'
 import { fetchStockScore } from '@/api/stockScore'
-import type { StockScoreDTO } from '@/api/stockScore'
 import {
   getPriceColor, formatRate, formatPrice,
   formatAmount, formatVolume, ErrorBanner,

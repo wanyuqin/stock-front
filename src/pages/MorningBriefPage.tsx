@@ -1,14 +1,17 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  RefreshCw, TrendingUp, TrendingDown, Minus,
+  TrendingUp, TrendingDown, Minus,
   Shield, Target, FileText, BarChart2, Sparkles,
-  Clock, CheckCircle2, AlertTriangle, Info, Loader2,
+  Clock, CheckCircle2, AlertTriangle, Info, Loader2, Newspaper, Globe2,
 } from 'lucide-react'
 import Topbar from '@/components/Topbar'
 import { useQuery } from '@/hooks/useQuery'
-import { fetchMorningBrief } from '@/api/morningBrief'
+import {
+  fetchSectionMarket, fetchSectionPosition, fetchSectionBuyPlans,
+  fetchSectionReports, fetchSectionValuation, fetchSectionNews,
+  fetchAIComment, fetchSectionExternal,
+} from '@/api/morningBrief'
 import type { MorningBriefSection } from '@/api/morningBrief'
-import { ErrorBanner } from '@/components/shared'
 
 // ── 大盘情绪仪表 ──────────────────────────────────────────────────
 
@@ -49,7 +52,7 @@ function MoodGauge({ score, mood }: { score: number; mood: string }) {
   )
 }
 
-// ── Section 配置 ──────────────────────────────────────────────────
+// ── Section 样式配置 ──────────────────────────────────────────────
 
 const SECTION_ICONS: Record<string, React.ElementType> = {
   '大盘情绪': TrendingUp,
@@ -57,23 +60,28 @@ const SECTION_ICONS: Record<string, React.ElementType> = {
   '买入计划': Target,
   '研报速递': FileText,
   '估值机会': BarChart2,
+  '新闻情绪': Newspaper,
+  '外部信号': Globe2,
 }
 
 const LEVEL_STYLE: Record<MorningBriefSection['level'], {
   border: string; bg: string; dot: string; icon: React.ElementType
 }> = {
-  normal:  { border: 'border-terminal-border',  bg: '',                   dot: 'bg-ink-muted',               icon: CheckCircle2 },
-  info:    { border: 'border-accent-blue/40',   bg: 'bg-accent-blue/5',   dot: 'bg-accent-blue',             icon: Info },
-  warning: { border: 'border-accent-amber/50',  bg: 'bg-accent-amber/5',  dot: 'bg-accent-amber',            icon: AlertTriangle },
+  normal:  { border: 'border-terminal-border',  bg: '',                   dot: 'bg-ink-muted',                icon: CheckCircle2 },
+  info:    { border: 'border-accent-blue/40',   bg: 'bg-accent-blue/5',   dot: 'bg-accent-blue',              icon: Info },
+  warning: { border: 'border-accent-amber/50',  bg: 'bg-accent-amber/5',  dot: 'bg-accent-amber',             icon: AlertTriangle },
   danger:  { border: 'border-accent-red/50',    bg: 'bg-accent-red/5',    dot: 'bg-accent-red animate-pulse', icon: AlertTriangle },
 }
+
+// ── 已加载的 Section 卡片 ─────────────────────────────────────────
 
 function SectionCard({ section }: { section: MorningBriefSection }) {
   const style   = LEVEL_STYLE[section.level]
   const Icon    = SECTION_ICONS[section.title] ?? FileText
   const LvlIcon = style.icon
+
   return (
-    <div className={`card p-0 overflow-hidden border ${style.border} ${style.bg}`}>
+    <div className={`card p-0 overflow-hidden border ${style.border} ${style.bg} transition-all duration-300`}>
       <div className="flex items-center gap-2.5 px-4 py-3 border-b border-terminal-border">
         <div className={`w-1.5 h-5 rounded-full ${style.dot}`} />
         <Icon size={14} className="text-ink-muted flex-shrink-0" />
@@ -98,209 +106,214 @@ function SectionCard({ section }: { section: MorningBriefSection }) {
   )
 }
 
-function SkeletonSection() {
+// ── 加载中的 Skeleton 卡片 ────────────────────────────────────────
+
+function SkeletonCard({ title, icon: Icon }: { title: string; icon?: React.ElementType }) {
+  const Ic = Icon ?? FileText
   return (
-    <div className="card p-4 space-y-2.5">
-      <div className="flex items-center gap-2 mb-3">
-        <div className="w-1.5 h-5 bg-terminal-muted rounded animate-pulse" />
-        <div className="h-3.5 w-20 bg-terminal-muted rounded animate-pulse" />
+    <div className="card p-0 overflow-hidden border border-terminal-border/50">
+      <div className="flex items-center gap-2.5 px-4 py-3 border-b border-terminal-border/40">
+        <div className="w-1.5 h-5 rounded-full bg-terminal-muted animate-pulse" />
+        <Ic size={14} className="text-ink-muted/40 flex-shrink-0" />
+        <span className="text-sm font-medium text-ink-muted/60">{title}</span>
+        <Loader2 size={12} className="ml-auto text-ink-muted/40 animate-spin" />
       </div>
-      {[80, 65, 90].map((w, i) => (
-        <div key={i} className="flex gap-2">
-          <div className="mt-1.5 w-1 h-1 bg-terminal-muted rounded-full flex-shrink-0" />
-          <div className="h-3 bg-terminal-muted rounded animate-pulse" style={{ width: `${w}%` }} />
-        </div>
-      ))}
+      <div className="px-4 py-3 space-y-2.5">
+        {[80, 65, 90].map((w, i) => (
+          <div key={i} className="flex gap-2">
+            <div className="mt-1.5 w-1 h-1 bg-terminal-muted/50 rounded-full flex-shrink-0" />
+            <div className="h-3 bg-terminal-muted/40 rounded animate-pulse" style={{ width: `${w}%` }} />
+          </div>
+        ))}
+      </div>
     </div>
   )
+}
+
+// ── Section 容器：加载中显示 skeleton，加载完显示卡片 ──────────────
+
+function SectionContainer({
+  data, loading, title, icon,
+}: {
+  data: MorningBriefSection | null | undefined
+  loading: boolean
+  title: string
+  icon?: React.ElementType
+}) {
+  if (loading && !data) return <SkeletonCard title={title} icon={icon} />
+  if (!data) return null
+  return <SectionCard section={data} />
 }
 
 // ── 主页面 ────────────────────────────────────────────────────────
 
 export default function MorningBriefPage() {
-  const [forcing, setForcing] = useState(false)
+  const today = new Date().toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })
 
-  // 首次加载 — 读缓存（from_cache=true 时秒返回）
-  const { data: brief, loading, error, refetch } = useQuery(
-    useCallback(() => fetchMorningBrief(false), []),
-  )
+  // 6 个独立请求——并行发出，各自独立渲染
+  const { data: marketData,    loading: ml } = useQuery(useCallback(() => fetchSectionMarket(), []))
+  const { data: positionData,  loading: pl } = useQuery(useCallback(() => fetchSectionPosition(), []))
+  const { data: buyPlanData,   loading: bl } = useQuery(useCallback(() => fetchSectionBuyPlans(), []))
+  const { data: reportData,    loading: rl } = useQuery(useCallback(() => fetchSectionReports(), []))
+  const { data: valuationData, loading: vl } = useQuery(useCallback(() => fetchSectionValuation(), []))
+  // 新闻情绪（含 LLM，最慢）— 独立加载，不影响其他 section
+  const { data: newsData,      loading: nl } = useQuery(useCallback(() => fetchSectionNews(), []))
+  const { data: externalData,  loading: xl } = useQuery(useCallback(() => fetchSectionExternal(), []))
 
-  // ── AI 点评轮询 ───────────────────────────────────────────────
-  // 当 ai_pending=true 时，每 5s 静默轮询一次，拿到 AI 点评后停止
-  // 关键：只更新 aiComment，不触发整体 loading，不清空内容
-  const [aiComment, setAiComment]   = useState<string>('')
-  const [aiPending, setAiPending]   = useState(false)
-  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  // AI 点评：轮询拿结果
+  const [aiComment, setAiComment] = useState('')
+  const [aiReady,   setAiReady]   = useState(false)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // 只要其他 section 都加载完，就开始轮询 AI 点评
+  const coreLoaded = !ml && !pl && !bl && !rl && !vl
 
   useEffect(() => {
-    if (!brief) return
-    // 收到主体后初始化 AI 状态
-    setAiComment(brief.ai_comment ?? '')
-    setAiPending(brief.ai_pending ?? false)
-  }, [brief?.date]) // 只在切换日期时重置，避免轮询结果覆盖
-
-  // 当 aiPending=true 时启动轮询
-  useEffect(() => {
-    if (!aiPending) {
-      if (pollTimerRef.current) {
-        clearInterval(pollTimerRef.current)
-        pollTimerRef.current = null
-      }
-      return
-    }
+    if (!coreLoaded || aiReady) return
 
     const poll = async () => {
       try {
-        const res = await fetchMorningBrief(false)
-        const data = res.data.data
-        if (data.ai_comment) {
-          setAiComment(data.ai_comment)
-          setAiPending(false)
+        const res = await fetchAIComment()
+        const d = res.data.data
+        if (d.ready && d.ai_comment) {
+          setAiComment(d.ai_comment)
+          setAiReady(true)
+          if (pollRef.current) clearInterval(pollRef.current)
         }
-      } catch {
-        // 静默失败，继续重试
-      }
+      } catch { /* 静默 */ }
     }
 
-    pollTimerRef.current = setInterval(poll, 5_000)
-    return () => {
-      if (pollTimerRef.current) clearInterval(pollTimerRef.current)
-    }
-  }, [aiPending])
+    poll() // 立即尝试一次
+    pollRef.current = setInterval(poll, 5_000)
+    return () => { if (pollRef.current) clearInterval(pollRef.current) }
+  }, [coreLoaded, aiReady])
 
-  // 强制刷新：只重新生成主体，不等 AI
-  const handleForceRefresh = async () => {
-    setForcing(true)
-    setAiComment('')
-    setAiPending(false)
-    try {
-      const res = await fetchMorningBrief(true)
-      const data = res.data.data
-      setAiComment(data.ai_comment ?? '')
-      setAiPending(data.ai_pending ?? false)
-      refetch() // 更新主 useQuery 的数据
-    } finally {
-      setForcing(false)
-    }
-  }
-
+  const market = marketData
   const moodTrend =
-    brief?.market_mood === 'DANGER'  ? <TrendingDown size={14} className="text-accent-red" />   :
-    brief?.market_mood === 'WARNING' ? <Minus size={14} className="text-accent-amber" />         :
+    market?.market_mood === 'DANGER'  ? <TrendingDown size={14} className="text-accent-red" />   :
+    market?.market_mood === 'WARNING' ? <Minus size={14} className="text-accent-amber" />        :
     <TrendingUp size={14} className="text-accent-green" />
 
-  // 展示的 AI 点评（优先用轮询拿到的，其次用 brief 里已有的）
-  const displayAI = aiComment || brief?.ai_comment || ''
+  const anyLoading = ml || pl || bl || rl || vl || nl || xl
 
   return (
     <div className="flex flex-col h-full">
       <Topbar
         title="开盘前报告"
-        subtitle={
-          brief
-            ? `${brief.date} · ${brief.from_cache ? '缓存' : '最新'} · ${new Date(brief.generated_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })} 生成`
-            : '每日 08:50 自动生成'
-        }
-        onRefresh={() => refetch()}
-        loading={loading || forcing}
-        actions={
-          <button
-            onClick={handleForceRefresh}
-            disabled={loading || forcing}
-            className="btn-ghost text-xs disabled:opacity-40"
-          >
-            <RefreshCw size={12} className={forcing ? 'animate-spin' : ''} />
-            强制刷新
-          </button>
-        }
+        subtitle={`${today} · 各模块独立加载`}
+        loading={anyLoading}
       />
 
       <div className="flex-1 overflow-y-auto p-5">
-        {error && <div className="mb-4"><ErrorBanner message={error} /></div>}
 
-        {/* 顶部：大盘仪表 + 总结 */}
-        {(brief || loading) && (
-          <div className="flex items-center gap-5 mb-6 p-5 card">
-            {loading && !brief ? (
-              <>
-                <div className="w-36 h-36 rounded-full bg-terminal-muted animate-pulse flex-shrink-0" />
-                <div className="flex-1 space-y-2.5">
+        {/* 顶部：大盘仪表 + 总结 + AI 点评 */}
+        <div className="mb-6 p-5 card">
+          <div className="flex items-center gap-5">
+            {/* 仪表盘 */}
+            {ml && !market ? (
+              <div className="w-36 h-36 rounded-full bg-terminal-muted animate-pulse flex-shrink-0" />
+            ) : market ? (
+              <MoodGauge score={market.mood_score} mood={market.market_mood} />
+            ) : null}
+
+            {/* 右侧文字区 */}
+            <div className="flex-1 min-w-0">
+              {ml && !market ? (
+                <div className="space-y-2">
                   <div className="h-4 w-24 bg-terminal-muted rounded animate-pulse" />
                   <div className="h-3 w-full bg-terminal-muted rounded animate-pulse" />
                   <div className="h-3 w-4/5 bg-terminal-muted rounded animate-pulse" />
                 </div>
-              </>
-            ) : brief ? (
-              <>
-                <MoodGauge score={brief.mood_score} mood={brief.market_mood} />
-                <div className="flex-1 min-w-0">
+              ) : market ? (
+                <>
                   <div className="flex items-center gap-2 mb-1.5">
                     {moodTrend}
                     <span className="text-sm font-medium text-ink-primary">
-                      {brief.market_mood === 'DANGER'  ? '市场极寒' :
-                       brief.market_mood === 'WARNING' ? '市场偏弱' :
-                       brief.mood_score >= 70           ? '市场火热' : '市场平稳'}
+                      {market.market_mood === 'DANGER'  ? '市场极寒' :
+                       market.market_mood === 'WARNING' ? '市场偏弱' :
+                       market.mood_score >= 70           ? '市场火热' : '市场平稳'}
                     </span>
-                    <span className="text-xs font-mono text-ink-muted ml-auto">{brief.date}</span>
                   </div>
-                  <p className="text-sm text-ink-secondary leading-relaxed">{brief.mood_summary}</p>
+                  <p className="text-sm text-ink-secondary leading-relaxed">{market.mood_summary}</p>
+                </>
+              ) : null}
 
-                  {/* AI 点评区 — 有内容就展示，pending 时展示加载动效 */}
-                  {(displayAI || aiPending) && (
-                    <div className="mt-3 px-3 py-2 bg-accent-blue/5 border border-accent-blue/20 rounded-md">
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <Sparkles size={11} className="text-accent-blue" />
-                        <span className="text-[10px] font-mono text-accent-blue uppercase tracking-wider">AI 点评</span>
-                        {aiPending && !displayAI && (
-                          <span className="ml-1 flex items-center gap-1 text-[10px] font-mono text-accent-blue/60">
-                            <Loader2 size={9} className="animate-spin" />
-                            生成中…
-                          </span>
-                        )}
-                        {aiPending && displayAI && (
-                          <Loader2 size={9} className="ml-1 animate-spin text-accent-blue/40" />
-                        )}
-                      </div>
-                      {displayAI ? (
-                        <p className="text-xs text-ink-secondary leading-relaxed">{displayAI}</p>
-                      ) : (
-                        <div className="space-y-1.5">
-                          <div className="h-2.5 bg-accent-blue/10 rounded animate-pulse w-full" />
-                          <div className="h-2.5 bg-accent-blue/10 rounded animate-pulse w-4/5" />
-                        </div>
-                      )}
-                    </div>
+              {/* AI 点评区 */}
+              <div className="mt-3 px-3 py-2 bg-accent-blue/5 border border-accent-blue/20 rounded-md min-h-[48px]">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <Sparkles size={11} className="text-accent-blue" />
+                  <span className="text-[10px] font-mono text-accent-blue uppercase tracking-wider">AI 点评</span>
+                  {!aiReady && (
+                    <span className="ml-1 flex items-center gap-1 text-[10px] font-mono text-accent-blue/60">
+                      <Loader2 size={9} className="animate-spin" />
+                      {coreLoaded ? '生成中…' : '等待数据加载…'}
+                    </span>
                   )}
-
-                  <div className="flex items-center gap-1.5 mt-3 text-[10px] font-mono text-ink-muted">
-                    <Clock size={9} />
-                    {brief.from_cache ? '读取缓存' : '实时生成'} · {new Date(brief.generated_at).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                  </div>
                 </div>
-              </>
-            ) : null}
-          </div>
-        )}
+                {aiComment ? (
+                  <p className="text-xs text-ink-secondary leading-relaxed">{aiComment}</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    <div className="h-2.5 bg-accent-blue/10 rounded animate-pulse w-full" />
+                    <div className="h-2.5 bg-accent-blue/10 rounded animate-pulse w-4/5" />
+                  </div>
+                )}
+              </div>
 
-        {/* Section 卡片网格 */}
-        {loading && !brief ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {Array.from({ length: 5 }).map((_, i) => <SkeletonSection key={i} />)}
-          </div>
-        ) : brief?.sections ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {brief.sections.map((section, i) => (
-              <SectionCard key={i} section={section} />
-            ))}
-          </div>
-        ) : !loading && !error ? (
-          <div className="flex flex-col items-center justify-center py-20 text-ink-muted gap-3">
-            <div className="w-12 h-12 rounded-full border border-terminal-border flex items-center justify-center">
-              <span className="text-xl font-mono">∅</span>
+              <div className="flex items-center gap-1.5 mt-2 text-[10px] font-mono text-ink-muted">
+                <Clock size={9} />
+                各模块独立加载，先到先显示
+              </div>
             </div>
-            <p className="text-sm">暂无报告，点击「强制刷新」立即生成</p>
           </div>
-        ) : null}
+        </div>
+
+        {/* Section 卡片网格 — 哪个 section 先回来就先渲染 */}
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <SectionContainer
+            data={marketData?.section}
+            loading={ml}
+            title="大盘情绪"
+            icon={TrendingUp}
+          />
+          <SectionContainer
+            data={positionData}
+            loading={pl}
+            title="持仓预警"
+            icon={Shield}
+          />
+          <SectionContainer
+            data={buyPlanData}
+            loading={bl}
+            title="买入计划"
+            icon={Target}
+          />
+          <SectionContainer
+            data={reportData}
+            loading={rl}
+            title="研报速递"
+            icon={FileText}
+          />
+          <SectionContainer
+            data={valuationData}
+            loading={vl}
+            title="估值机会"
+            icon={BarChart2}
+          />
+          {/* 新闻情绪：最慢，skeleton 持续显示直到返回 */}
+          <SectionContainer
+            data={newsData}
+            loading={nl}
+            title="新闻情绪"
+            icon={Newspaper}
+          />
+          <SectionContainer
+            data={externalData}
+            loading={xl}
+            title="外部信号"
+            icon={Globe2}
+          />
+        </div>
       </div>
     </div>
   )

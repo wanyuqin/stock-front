@@ -1,4 +1,5 @@
 import http, { AI_TIMEOUT } from './http'
+import { resolveMarketSource } from './marketSource'
 import type {
   ApiResponse, ListResponse,
   Quote, Stock, WatchlistItem,
@@ -18,17 +19,23 @@ export const fetchStocks = (limit = 50, offset = 0) =>
 export const fetchStockByCode = (code: string) =>
   http.get<ApiResponse<Stock>>(`/stocks/${code}`)
 
-export const fetchQuote = (code: string) =>
-  http.get<ApiResponse<Quote>>(`/stocks/${code}/quote`)
+export const fetchQuote = (code: string, source?: string) =>
+  http.get<ApiResponse<Quote>>(`/stocks/${code}/quote`, {
+    params: { source: resolveMarketSource(source) },
+  })
 
-export const fetchKLine = (code: string, limit = 120, source: 'em' | 'qq' = 'em') =>
-  http.get<ApiResponse<KLineResponse>>(`/stocks/${code}/kline`, { params: { limit, source } })
+export const fetchKLine = (code: string, limit = 120, source?: string) =>
+  http.get<ApiResponse<KLineResponse>>(`/stocks/${code}/kline`, {
+    params: { limit, source: resolveMarketSource(source) },
+  })
 
 export const fetchMinute = (code: string, days = 1) =>
   http.get<ApiResponse<import('@/types').MinuteResponse>>(`/stocks/${code}/minute`, { params: { days } })
 
-export const fetchAnalysis = (code: string) =>
+// ★ 修复：fetchAnalysis 接受外部传入的 source，不再强制用全局默认值
+export const fetchAnalysis = (code: string, source?: string) =>
   http.get<ApiResponse<AnalysisResult>>(`/stocks/${code}/analysis`, {
+    params: { source: resolveMarketSource(source) },
     timeout: AI_TIMEOUT,
   })
 
@@ -158,26 +165,44 @@ export interface MarketSummary {
   down_count: number
 }
 
+export interface DataSourceFallbackStat {
+  module: string
+  from: string
+  to: string
+  count: number
+}
+
+export interface DataSourceStatus {
+  default_source: 'qq' | 'em'
+  fallbacks: DataSourceFallbackStat[]
+}
+
 export const fetchMarketSummary = () =>
-  http.get<ApiResponse<MarketSummary>>('/market/summary')
+  http.get<ApiResponse<MarketSummary>>('/market/summary', {
+    params: { source: resolveMarketSource() },
+  })
+
+export const fetchDataSourceStatus = () =>
+  http.get<ApiResponse<DataSourceStatus>>('/system/data-source-status')
 
 // ── 估值分位 ──────────────────────────────────────────────────────
 
-export const fetchValuation = (code: string) =>
-  http.get<ApiResponse<StockValuation>>(`/stocks/${code}/valuation`)
+export const fetchValuation = (code: string, source?: string) =>
+  http.get<ApiResponse<StockValuation>>(`/stocks/${code}/valuation`, {
+    params: { source: resolveMarketSource(source) },
+  })
 
 export const fetchValuationSummary = () =>
   http.get<ApiResponse<ValuationSummary>>('/market/valuation-summary')
 
 export const triggerValuationSync = () =>
   http.post<ApiResponse<{ total: number; success: number; failed: number; message: string }>>(
-    '/market/valuation-sync',
+    `/market/valuation-sync?source=${resolveMarketSource()}`,
     {},
   )
 
 // ── 大单分析 ────────────────────────────────────────────────
 
-// 按需拉取，失警频率不要超过 1次/30s
 export const fetchBigDeal = (code: string, changeRate?: number) =>
   http.get<ApiResponse<import('@/types').BigDealSummary>>(
     `/stocks/${code}/big-deal`,
@@ -186,6 +211,6 @@ export const fetchBigDeal = (code: string, changeRate?: number) =>
 
 export const backfillValuationHistory = (days = 90) =>
   http.post<ApiResponse<{ days: number; total: number; success: number; failed: number; message: string }>>(
-    `/market/valuation-backfill?days=${days}`,
+    `/market/valuation-backfill?days=${days}&source=${resolveMarketSource()}`,
     {},
   )

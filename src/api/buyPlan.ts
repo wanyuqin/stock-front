@@ -2,6 +2,33 @@ import http from './http'
 import type { ApiResponse, ListResponse } from '@/types'
 import type { BuyPlan, CreateBuyPlanRequest, UpdateBuyPlanRequest, BuyPlanStatus } from '@/types/buy_plan'
 
+export interface SmartPlanBacktestRequest {
+  stock_code: string
+  buy_price: number
+  buy_price_high: number
+  stop_loss: number
+  target_price: number
+  lookahead_days?: number
+  sample_days?: number
+}
+
+export interface SmartPlanBacktestResult {
+  stock_code: string
+  sample_days: number
+  lookahead_days: number
+  total_samples: number
+  triggered_samples: number
+  win_samples: number
+  loss_samples: number
+  timeout_samples: number
+  trigger_rate_pct: number
+  win_rate_pct: number
+  avg_return_pct: number
+  median_return_pct: number
+  avg_hold_days: number
+  profit_factor: number
+}
+
 export const fetchBuyPlans = (status = 'active') =>
   http.get<ApiResponse<ListResponse<BuyPlan>>>('/buy-plans', { params: { status } })
 
@@ -29,3 +56,6 @@ export const deleteBuyPlan = (id: number) =>
 
 export const checkBuyPlanTriggers = () =>
   http.post<ApiResponse<{ triggered: number; items: BuyPlan[] }>>('/buy-plans/check-triggers', {})
+
+export const backtestSmartPlan = (req: SmartPlanBacktestRequest) =>
+  http.post<ApiResponse<SmartPlanBacktestResult>>('/buy-plans/backtest', req)

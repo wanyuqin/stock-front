@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Bell, X, FileText } from 'lucide-react'
+import { X, FileText } from 'lucide-react'
 import { fetchReportCount } from '@/api/report'
 import { fetchWatchlist } from '@/api/stock'
 import { useQuery } from '@/hooks/useQuery'

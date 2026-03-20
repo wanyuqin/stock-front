@@ -6,7 +6,7 @@ import {
   Calendar, Filter, Loader2, Radio,
 } from 'lucide-react'
 import Topbar from '@/components/Topbar'
-import { ErrorBanner, EmptyState, formatAmount } from '@/components/shared'
+import { ErrorBanner } from '@/components/shared'
 import { useReports } from '@/hooks/useReports'
 import { syncReports } from '@/api/report'
 import { fetchWatchlist } from '@/api/stock'
@@ -27,7 +27,6 @@ function HighlightText({ text }: { text: string }) {
   if (!text) return null
 
   const parts: { str: string; highlight: boolean }[] = []
-  let remaining = text
   let lastIdx = 0
 
   // 构建正则（一次性匹配所有关键词）

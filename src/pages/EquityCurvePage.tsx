@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { TrendingUp, TrendingDown, Activity, Award, RefreshCw, AlertCircle } from 'lucide-react'
+import { TrendingUp, TrendingDown, Activity, RefreshCw, AlertCircle } from 'lucide-react'
 import Topbar from '@/components/Topbar'
 import { useQuery } from '@/hooks/useQuery'
 import { ErrorBanner } from '@/components/shared'

@@ -47,6 +47,12 @@ interface DailyScan {
   created_at:   string
 }
 
+interface ScanListResponse {
+  date: string
+  count: number
+  items: DailyScan[]
+}
+
 // ── API 函数 ──────────────────────────────────────────────────
 // axios 拦截器返回整个 AxiosResponse，
 // resp.data       = { code, message, data: T }   ← 后端统一包装层
@@ -55,10 +61,10 @@ const runScan = () =>
   http.post<ApiResponse<ScanResult>>('/admin/scan/run', {})
 
 const fetchTodayScans = () =>
-  http.get<ApiResponse<{ date: string; count: number; items: DailyScan[] }>>('/admin/scan/today')
+  http.get<ApiResponse<ScanListResponse>>('/admin/scan/today')
 
 const fetchHistoryScans = (date: string) =>
-  http.get<ApiResponse<{ date: string; count: number; items: DailyScan[] }>>(
+  http.get<ApiResponse<ScanListResponse>>(
     `/admin/scan/history?date=${date}`
   )
 
@@ -296,10 +302,7 @@ function TodayScanPanel({ refreshKey }: { refreshKey: number }) {
   )
 
   const { data: histData, loading: histLoading, error: histErr } = useQuery(
-    useCallback(
-      () => (queryDate ? fetchHistoryScans(queryDate) : Promise.resolve(null as any)),
-      [queryDate],
-    ),
+    useCallback(() => fetchHistoryScans(queryDate), [queryDate]),
     { enabled: !!queryDate },
   )
 

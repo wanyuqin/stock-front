@@ -1,4 +1,5 @@
 import http from './http'
+import { resolveMarketSource } from './marketSource'
 import type { ApiResponse } from '@/types'
 
 export interface ScoreItem {
@@ -24,5 +25,7 @@ export interface StockScoreDTO {
   atr:           number
 }
 
-export const fetchStockScore = (code: string) =>
-  http.get<ApiResponse<StockScoreDTO>>(`/stocks/${code}/score`)
+export const fetchStockScore = (code: string, source?: string) =>
+  http.get<ApiResponse<StockScoreDTO>>(`/stocks/${code}/score`, {
+    params: { source: resolveMarketSource(source) },
+  })

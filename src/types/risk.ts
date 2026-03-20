@@ -41,6 +41,11 @@ export interface DailyRiskState {
   loss_limit_pct: number
   loss_limit_amount: number
   remaining_loss_amount: number
+  today_buy_open_count: number
+  max_buy_open_per_day: number
+  consecutive_loss_days: number
+  consecutive_loss_limit: number
+  guardrails_triggered: string[]
   can_open_new_position: boolean
   message: string
 }
@@ -138,4 +143,67 @@ export interface UpdateTodayRiskTodoStatusRequest {
   todo_date?: string
   todo_id: string
   done: boolean
+}
+
+export interface GenerateLowHealthTodoRequest {
+  limit?: number
+}
+
+export interface GenerateLowHealthTodoItem {
+  todo_id: string
+  stock_code: string
+  stock_name: string
+  health_score: number
+  priority: 'HIGH' | 'MEDIUM' | 'LOW' | string
+}
+
+export interface GenerateLowHealthTodoResult {
+  date: string
+  limit: number
+  generated: number
+  items: GenerateLowHealthTodoItem[]
+}
+
+export interface WeeklyReviewIssue {
+  key: string
+  label: string
+  count: number
+}
+
+export interface WeeklyReviewResult {
+  from_date: string
+  to_date: string
+  days: number
+  total_trades: number
+  buy_count: number
+  sell_count: number
+  win_rate: number
+  realized_pnl: number
+  max_drawdown_pct: number
+  profit_days: number
+  loss_days: number
+  top_issues: WeeklyReviewIssue[]
+  summary: string
+  suggestions: string[]
+}
+
+export interface HealthTrendPoint {
+  date: string
+  score: number
+}
+
+export interface HealthTrendItem {
+  stock_code: string
+  stock_name: string
+  current_score: number
+  current_level: 'GOOD' | 'WARN' | 'DANGER' | string
+  trend: HealthTrendPoint[]
+}
+
+export interface HealthTrendResult {
+  from_date: string
+  to_date: string
+  days: number
+  generated_at: string
+  items: HealthTrendItem[]
 }

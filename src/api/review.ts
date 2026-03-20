@@ -1,5 +1,6 @@
 import http from './http'
-import { ReviewStats, TradeReview, AiAudit, ScatterPoint, BehaviorStat } from '../types/review'
+import { resolveMarketSource } from './marketSource'
+import { ReviewStats, TradeReview, AiAudit, ScatterPoint, BehaviorStat, BuyContext } from '../types/review'
 import { KLineResponse, ApiResponse } from '../types'
 
 // ── 后端响应类型 ──────────────────────────────────────────────────
@@ -40,6 +41,7 @@ interface TradeReviewWithTrade {
   execution_score:  number | null
   regret_index:     number | null
   consistency_flag: string
+  consistency_note: string
   pnl_pct:          number | null
   price_at_sell:    number | null
   price_5d_after:   number | null
@@ -47,6 +49,7 @@ interface TradeReviewWithTrade {
   created_at:       string
   trade_price:      number
   trade_volume:     number
+  buy_context:      BuyContext | null
 }
 
 // ── API 函数 ──────────────────────────────────────────────────────
@@ -74,7 +77,6 @@ export const fetchScatterData = async (): Promise<ScatterPoint[]> => {
     params: { limit: 100, offset: 0 },
   })
   const items = response.data.items ?? []
-
   return items.map(item => {
     let sentiment = 50
     const m = item.mental_state || ''
@@ -85,7 +87,6 @@ export const fetchScatterData = async (): Promise<ScatterPoint[]> => {
     else if (m === '迷茫')                 sentiment = 55
     else if (m === '自信')                 sentiment = 30
     else if (m === '冷静')                 sentiment = 15
-
     return {
       id:              String(item.id),
       sentiment_score: sentiment + (Math.random() * 6 - 3),
@@ -101,15 +102,13 @@ export const fetchAiAudit = async (tradeId: string, existingComment?: string): P
     const klineData = await fetchKlineForReview(review?.stock_code ?? '')
     return { trade_id: tradeId, comment: existingComment, kline_data: klineData, is_generating: false }
   }
-
   triggerAiAuditAsync(tradeId)
   const review = await getReviewById(tradeId)
   const klineData = await fetchKlineForReview(review?.stock_code ?? '')
-
   return {
-    trade_id:    tradeId,
-    comment:     'AI 正在深度分析中，通常需要 30-60 秒，请稍后刷新页面查看结果…',
-    kline_data:  klineData,
+    trade_id:      tradeId,
+    comment:       'AI 正在深度分析中，通常需要 30-60 秒，请稍后刷新页面查看结果…',
+    kline_data:    klineData,
     is_generating: true,
   }
 }
@@ -120,8 +119,6 @@ export const submitImprovementPlan = async (tradeLogId: number, content: string)
     user_note:    content,
   })
 }
-
-// ── 行为归因统计 ──────────────────────────────────────────────────
 
 export const fetchBehaviorStats = async (): Promise<{ items: BehaviorStat[]; total_trades: number }> => {
   const { data: response } = await http.get<ApiResponse<{ items: BehaviorStat[]; total_trades: number }>>('/review/behavior-stats')
@@ -150,7 +147,7 @@ async function fetchKlineForReview(stockCode: string): Promise<AiAudit['kline_da
   if (!stockCode) return []
   try {
     const { data: wrapper } = await http.get<ApiResponse<KLineResponse>>(`/stocks/${stockCode}/kline`, {
-      params: { limit: 30 },
+      params: { limit: 30, source: resolveMarketSource() },
     })
     return (wrapper.data?.klines ?? []).map(k => ({
       date: k.date, open: k.open, close: k.close, high: k.high, low: k.low,
@@ -165,7 +162,7 @@ function mapToTradeReview(item: TradeReviewWithTrade): TradeReview {
   const sellPrice = item.price_at_sell ?? item.trade_price ?? 0
   const buyPrice  = item.pnl_pct != null && item.pnl_pct !== 0
     ? sellPrice / (1 + item.pnl_pct)
-    : sellPrice
+    : (item.buy_context?.buy_price ?? sellPrice)
 
   let status: TradeReview['status'] = 'LOGICAL_CONSISTENCY'
   if (item.consistency_flag !== 'NORMAL') {
@@ -173,13 +170,14 @@ function mapToTradeReview(item: TradeReviewWithTrade): TradeReview {
   }
 
   const sellDate = item.traded_at ? item.traded_at.split('T')[0] : ''
+  const buyDate  = item.buy_context?.buy_date ?? '—'
 
   return {
     id:               String(item.id),
     trade_log_id:     String(item.trade_log_id),
     stock_name:       item.stock_name || item.stock_code,
     stock_code:       item.stock_code,
-    buy_date:         '—',
+    buy_date:         buyDate,
     buy_price:        parseFloat(buyPrice.toFixed(2)),
     sell_date:        sellDate,
     sell_price:       sellPrice,
@@ -194,5 +192,8 @@ function mapToTradeReview(item: TradeReviewWithTrade): TradeReview {
     is_disciplined:   item.consistency_flag === 'NORMAL',
     ai_audit_comment: item.ai_audit_comment || '',
     mental_state:     item.mental_state || '',
+    buy_context:      item.buy_context,
+    consistency_flag: item.consistency_flag,
+    consistency_note: item.consistency_note,
   }
 }

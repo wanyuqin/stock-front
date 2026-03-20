@@ -1,9 +1,9 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import {
   Radar, RefreshCw, Zap, TrendingUp, TrendingDown,
-  ArrowUpDown, CheckCircle2, Clock, BarChart2,
+  ArrowUpDown, Clock, BarChart2,
   Banknote, Activity, ChevronUp, ChevronDown, Moon,
-  BookmarkPlus, Layers,
+  BookmarkPlus, Layers, Star, Check,
 } from 'lucide-react'
 import Topbar from '@/components/Topbar'
 import StockAnalysisModal from '@/components/StockAnalysisModal'
@@ -11,9 +11,10 @@ import TemplatePanel from '@/components/TemplatePanel'
 import { useQuery } from '@/hooks/useQuery'
 import {
   executeScreener, syncMarketData, fetchScreenerStatus,
+  addToWatchlist, fetchWatchlist,
 } from '@/api/stock'
 import { getPriceColor, formatRate } from '@/components/shared'
-import type { ScoredStock, ScreenerResult } from '@/types'
+import type { ScoredStock, WatchlistItem } from '@/types'
 
 // ── 工具函数 ──────────────────────────────────────────────────────
 function formatYuan(v: number) {
@@ -57,14 +58,66 @@ function ScoreRing({ score }: { score: number }) {
   )
 }
 
+// ── 加入自选股按钮 ──────────────────────────────────────────────
+function WatchlistButton({ code, watchlistCodes, onAdded }: {
+  code: string
+  watchlistCodes: Set<string>
+  onAdded: (code: string) => void
+}) {
+  const [loading, setLoading] = useState(false)
+  const [done,    setDone]    = useState(false)
+  const inList = watchlistCodes.has(code) || done
+
+  const handleAdd = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (inList || loading) return
+    setLoading(true)
+    try {
+      await addToWatchlist(code, '来自机会雷达')
+      setDone(true)
+      onAdded(code)
+    } catch {
+      // 静默失败
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (inList) {
+    return (
+      <div className="flex items-center gap-1 text-[11px] font-mono text-accent-green/70">
+        <Check size={10} /> 已自选
+      </div>
+    )
+  }
+
+  return (
+    <button
+      onClick={handleAdd}
+      disabled={loading}
+      className="flex items-center gap-1 text-[11px] font-mono text-ink-muted hover:text-accent-amber
+        border border-transparent hover:border-accent-amber/30 hover:bg-accent-amber/5
+        px-2 py-1 rounded transition-all disabled:opacity-40"
+    >
+      {loading
+        ? <RefreshCw size={10} className="animate-spin" />
+        : <Star size={10} />
+      }
+      加自选
+    </button>
+  )
+}
+
 // ── 机会卡片 ──────────────────────────────────────────────────────
 interface OpportunityCardProps {
   stock: ScoredStock
   rank: number
+  watchlistCodes: Set<string>
+  onWatchlistAdded: (code: string) => void
   onClick: () => void
 }
 
-function OpportunityCard({ stock, rank, onClick }: OpportunityCardProps) {
+function OpportunityCard({ stock, rank, watchlistCodes, onWatchlistAdded, onClick }: OpportunityCardProps) {
   const priceColor = getPriceColor(stock.pct_chg)
   const TrendIcon  = stock.pct_chg >= 0 ? TrendingUp : TrendingDown
 
@@ -82,13 +135,21 @@ function OpportunityCard({ stock, rank, onClick }: OpportunityCardProps) {
       className="group relative flex flex-col bg-terminal-panel border border-terminal-border rounded-xl p-4 cursor-pointer
         hover:border-accent-cyan/40 hover:bg-terminal-surface transition-all duration-200 hover:shadow-lg hover:shadow-black/20"
     >
-      <div className="absolute top-3 right-3 w-5 h-5 flex items-center justify-center rounded bg-terminal-muted">
-        <span className="text-[10px] font-mono text-ink-muted">#{rank}</span>
+      {/* 排名 + 加自选（右上角） */}
+      <div className="absolute top-3 right-3 flex items-center gap-2">
+        <WatchlistButton
+          code={stock.code}
+          watchlistCodes={watchlistCodes}
+          onAdded={onWatchlistAdded}
+        />
+        <div className="w-5 h-5 flex items-center justify-center rounded bg-terminal-muted">
+          <span className="text-[10px] font-mono text-ink-muted">#{rank}</span>
+        </div>
       </div>
 
       <div className="flex items-start gap-3 mb-3">
         <ScoreRing score={stock.score} />
-        <div className="flex-1 min-w-0 pt-0.5">
+        <div className="flex-1 min-w-0 pt-0.5 pr-16">
           <p className="text-sm font-semibold text-ink-primary truncate">{stock.name}</p>
           <p className="text-[11px] font-mono text-ink-muted">{stock.code}</p>
           <div className="flex items-center gap-2 mt-1">
@@ -245,6 +306,23 @@ export default function OpportunityRadar() {
   const [refetchKey,     setRefetchKey]     = useState(0)
   const [showTemplates,  setShowTemplates]  = useState(false)
 
+  // 自选股集合（用于判断某只股票是否已在自选）
+  const [watchlistCodes, setWatchlistCodes] = useState<Set<string>>(new Set())
+
+  // 加载自选股列表
+  useEffect(() => {
+    fetchWatchlist()
+      .then(res => {
+        const items: WatchlistItem[] = res.data.data?.items ?? []
+        setWatchlistCodes(new Set(items.map(i => i.stock_code)))
+      })
+      .catch(() => {})
+  }, [])
+
+  const handleWatchlistAdded = (code: string) => {
+    setWatchlistCodes(prev => new Set([...prev, code]))
+  }
+
   const { data: result, loading, error, refetch } = useQuery(
     useCallback(() => executeScreener({ min_score: minScore, limit: 100 }), // eslint-disable-line react-hooks/exhaustive-deps
     [minScore, refetchKey]),
@@ -293,6 +371,25 @@ export default function OpportunityRadar() {
     high:    result.items.filter(s => s.score >= 70).length,
     elapsed: result.elapsed_ms,
   } : null
+
+  // 批量加入自选股（已在列表的跳过）
+  const [batchAdding, setBatchAdding] = useState(false)
+  const [batchDone,   setBatchDone]   = useState(false)
+
+  const handleBatchAdd = async () => {
+    const top = sortedItems.filter(s => s.score >= 70 && !watchlistCodes.has(s.code)).slice(0, 10)
+    if (top.length === 0) return
+    setBatchAdding(true)
+    setBatchDone(false)
+    try {
+      await Promise.allSettled(top.map(s => addToWatchlist(s.code, `来自机会雷达 score=${s.score}`)))
+      setWatchlistCodes(prev => new Set([...prev, ...top.map(s => s.code)]))
+      setBatchDone(true)
+      setTimeout(() => setBatchDone(false), 3000)
+    } finally {
+      setBatchAdding(false)
+    }
+  }
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -358,7 +455,27 @@ export default function OpportunityRadar() {
             ))}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* 批量加自选 */}
+            {sortedItems.filter(s => s.score >= 70 && !watchlistCodes.has(s.code)).length > 0 && (
+              <button
+                onClick={handleBatchAdd}
+                disabled={batchAdding}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono border transition-all ${
+                  batchDone
+                    ? 'border-accent-green/30 text-accent-green bg-accent-green/10'
+                    : 'border-accent-amber/30 text-accent-amber bg-accent-amber/5 hover:bg-accent-amber/10'
+                }`}
+              >
+                {batchAdding
+                  ? <><RefreshCw size={10} className="animate-spin" /> 添加中…</>
+                  : batchDone
+                  ? <><Check size={10} /> 已添加</>
+                  : <><Star size={10} /> 批量加自选（≥70分）</>
+                }
+              </button>
+            )}
+
             {/* 筛选模板按钮 */}
             <button
               onClick={() => setShowTemplates(v => !v)}
@@ -385,7 +502,6 @@ export default function OpportunityRadar() {
           </div>
         )}
 
-        {/* 保存当前条件为模板 */}
         {!showTemplates && (
           <div className="flex items-center gap-2">
             <button onClick={() => setShowTemplates(true)}
@@ -434,7 +550,14 @@ export default function OpportunityRadar() {
         {sortedItems.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {sortedItems.map((stock, idx) => (
-              <OpportunityCard key={stock.code} stock={stock} rank={idx + 1} onClick={() => setSelectedStock(stock)} />
+              <OpportunityCard
+                key={stock.code}
+                stock={stock}
+                rank={idx + 1}
+                watchlistCodes={watchlistCodes}
+                onWatchlistAdded={handleWatchlistAdded}
+                onClick={() => setSelectedStock(stock)}
+              />
             ))}
           </div>
         )}

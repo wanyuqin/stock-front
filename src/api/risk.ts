@@ -11,6 +11,10 @@ import type {
   EventCalendarResult,
   TodayRiskTodoResult,
   UpdateTodayRiskTodoStatusRequest,
+  GenerateLowHealthTodoRequest,
+  GenerateLowHealthTodoResult,
+  HealthTrendResult,
+  WeeklyReviewResult,
 } from '@/types/risk'
 
 export const fetchRiskProfile = () =>
@@ -41,3 +45,12 @@ export const fetchTodayRiskTodo = () =>
 
 export const updateTodayRiskTodoStatus = (req: UpdateTodayRiskTodoStatusRequest) =>
   http.put<ApiResponse<{ success: boolean }>>('/risk/today-todo/status', req)
+
+export const generateLowHealthTodo = (req: GenerateLowHealthTodoRequest = {}) =>
+  http.post<ApiResponse<GenerateLowHealthTodoResult>>('/risk/today-todo/generate-low-health', req)
+
+export const fetchWeeklyReview = (days = 7) =>
+  http.get<ApiResponse<WeeklyReviewResult>>('/risk/weekly-review', { params: { days } })
+
+export const fetchHealthTrend = (days = 7) =>
+  http.get<ApiResponse<HealthTrendResult>>('/risk/health-trend', { params: { days } })

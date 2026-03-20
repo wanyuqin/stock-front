@@ -29,7 +29,7 @@ export function useToastRegister(push: ToastPush) {
 }
 
 export function pushToast(item: Omit<ToastItem, 'id'>) {
-  _push?.({ ...item, id: `${Date.now()}-${Math.random()}` })
+  _push?.(item)
 }
 
 // ─────────────────────────────────────────────────────────────────

@@ -2,7 +2,7 @@ import { useCallback, useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   X, Brain, Star, StarOff, RefreshCw,
-  PlusCircle, TrendingUp, TrendingDown,
+  PlusCircle, TrendingUp,
   CheckCircle, AlertCircle,
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'

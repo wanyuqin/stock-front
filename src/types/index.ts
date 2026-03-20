@@ -272,6 +272,8 @@ export interface PositionDiagnosisResult {
   stock_code:       string
   stock_name:       string
   signal:           SignalType
+  health_score:     number
+  health_level:     string
   action_directive: string
   snapshot:         DiagnosticSnapshot
   sector_info:      SectorInfo | null

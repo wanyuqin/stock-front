@@ -2,10 +2,10 @@ import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Target, AlertCircle, CheckCircle2, Clock, Ban, Pencil, Trash2, ChevronRight } from 'lucide-react'
 import { useQuery } from '@/hooks/useQuery'
-import { fetchBuyPlansByCode, createBuyPlan, updateBuyPlan, updateBuyPlanStatus, deleteBuyPlan } from '@/api/buyPlan'
+import { fetchBuyPlansByCode, createBuyPlan, updateBuyPlanStatus, deleteBuyPlan } from '@/api/buyPlan'
 import { fetchDailyRiskState } from '@/api/risk'
 import { EmptyState } from '@/components/shared'
-import type { BuyPlan, BuyPlanStatus } from '@/types/buy_plan'
+import type { BuyPlan, BuyPlanStatus, CreateBuyPlanRequest } from '@/types/buy_plan'
 
 // ── 状态配置 ──────────────────────────────────────────────────────
 
@@ -28,7 +28,7 @@ interface QuickFormProps {
   currentPrice?: number
   blockNewBuy?: boolean
   blockReason?: string
-  onSave: (req: Record<string, unknown>) => Promise<void>
+  onSave: (req: CreateBuyPlanRequest) => Promise<void>
   onCancel: () => void
 }
 
@@ -56,7 +56,7 @@ function QuickForm({ code, stockName, currentPrice, blockNewBuy, blockReason, on
     if (!f.buy_price) { setErr('请填写买入价'); return }
     setSaving(true); setErr('')
     try {
-      const payload: Record<string, unknown> = { stock_code: code }
+      const payload: CreateBuyPlanRequest = { stock_code: code }
       if (f.buy_price)       payload.buy_price       = parseFloat(f.buy_price)
       if (f.target_price)    payload.target_price    = parseFloat(f.target_price)
       if (f.stop_loss_price) payload.stop_loss_price = parseFloat(f.stop_loss_price)
@@ -277,8 +277,8 @@ export default function BuyPlanPanel({ code, stockName = code, currentPrice }: B
   const active = plans.filter(p => p.status === 'WATCHING' || p.status === 'READY')
   const done   = plans.filter(p => p.status !== 'WATCHING' && p.status !== 'READY')
 
-  const handleCreate = async (req: Record<string, unknown>) => {
-    await createBuyPlan(req as import('@/types/buy_plan').CreateBuyPlanRequest)
+  const handleCreate = async (req: CreateBuyPlanRequest) => {
+    await createBuyPlan(req)
     refetch()
     setShowForm(false)
   }

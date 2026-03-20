@@ -11,12 +11,13 @@ import {
   Calendar, MessageSquare,
 } from 'lucide-react'
 import { fetchPositionDiagnosis, analyzePosition, syncPosition } from '@/api/stock'
-import { fetchEventCalendar } from '@/api/risk'
+import { fetchEventCalendar, fetchHealthTrend, generateLowHealthTodo } from '@/api/risk'
 import type {
   PositionDiagnosisResult, PositionAIResult, SignalType,
   DiagnosticSnapshot, SyncPositionRequest,
 } from '@/types'
 import type { RiskEventItem } from '@/types/risk'
+import type { HealthTrendItem } from '@/types/risk'
 
 const FEE_BUY  = 0.0001
 const FEE_SELL = 0.0006
@@ -69,6 +70,66 @@ const fYuan  = (n: number) => {
 const tBreakEven = (cost: number) => cost * (1 + FEE_BUY) / (1 - FEE_SELL)
 const tNet = (price: number, cost: number) =>
   (price * (1 - FEE_SELL) - cost * (1 + FEE_BUY)) / cost
+
+function getHealthScore(item: PositionDiagnosisResult): number {
+  if (Number.isFinite(item.health_score)) {
+    return Math.max(0, Math.min(100, item.health_score))
+  }
+  switch (item.signal) {
+    case 'STOP_LOSS': return 20
+    case 'SELL': return 40
+    case 'SELL_T': return 55
+    case 'BUY_T': return 68
+    default: return 76
+  }
+}
+
+function getHealthLevel(item: PositionDiagnosisResult): 'GOOD' | 'WARN' | 'DANGER' {
+  if (item.health_level === 'GOOD' || item.health_level === 'WARN' || item.health_level === 'DANGER') {
+    return item.health_level
+  }
+  const score = getHealthScore(item)
+  if (score < 45) return 'DANGER'
+  if (score < 70) return 'WARN'
+  return 'GOOD'
+}
+
+function healthCfg(level: 'GOOD' | 'WARN' | 'DANGER') {
+  if (level === 'DANGER') {
+    return { text: 'text-red-300', bg: 'bg-red-500/12', border: 'border-red-500/40', label: '危险' }
+  }
+  if (level === 'WARN') {
+    return { text: 'text-amber-300', bg: 'bg-amber-500/10', border: 'border-amber-500/35', label: '警戒' }
+  }
+  return { text: 'text-accent-green', bg: 'bg-accent-green/10', border: 'border-accent-green/35', label: '健康' }
+}
+
+type HealthFactor = {
+  label: string
+  delta: number
+  note: string
+}
+
+function healthFactors(item: PositionDiagnosisResult): HealthFactor[] {
+  const s = item.snapshot
+  const factors: HealthFactor[] = [
+    { label: '基础分', delta: 80, note: '默认起始分' },
+  ]
+  switch (item.signal) {
+    case 'STOP_LOSS': factors.push({ label: '信号修正', delta: -50, note: '已触发止损' }); break
+    case 'SELL': factors.push({ label: '信号修正', delta: -30, note: '减仓观望' }); break
+    case 'SELL_T': factors.push({ label: '信号修正', delta: -20, note: '高抛做T' }); break
+    case 'BUY_T': factors.push({ label: '信号修正', delta: 5, note: '低吸做T' }); break
+    default: factors.push({ label: '信号修正', delta: 8, note: '持有等待' }); break
+  }
+  if (s.near_stop_warning) factors.push({ label: '止损临近', delta: -20, note: '距离止损位过近' })
+  if (s.stop_dist_pct < 2) factors.push({ label: '止损缓冲', delta: -15, note: '缓冲空间 < 2%' })
+  else if (s.stop_dist_pct >= 8) factors.push({ label: '止损缓冲', delta: 6, note: '缓冲空间较大' })
+  if (s.rel_strength_diff < -5) factors.push({ label: '板块强度', delta: -10, note: '明显弱于板块' })
+  else if (s.rel_strength_diff > 0) factors.push({ label: '板块强度', delta: 4, note: '强于板块' })
+  if (s.near_target_notice) factors.push({ label: '接近目标价', delta: -4, note: '接近止盈区，波动风险增大' })
+  return factors
+}
 
 // ── 止损距离颜色 ──────────────────────────────────────────────────
 function stopDistColor(pct: number): string {
@@ -245,6 +306,45 @@ function Dot({ color, label }: { color: string; label: string }) {
   )
 }
 
+function HealthPill({ item, compact = false }: { item: PositionDiagnosisResult; compact?: boolean }) {
+  const score = getHealthScore(item)
+  const level = getHealthLevel(item)
+  const cfg = healthCfg(level)
+  return (
+    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] font-mono font-bold ${cfg.text} ${cfg.bg} ${cfg.border}`}>
+      {compact ? '分' : '健康'}
+      <span>{score}</span>
+      {!compact && <span className="opacity-80">· {cfg.label}</span>}
+    </span>
+  )
+}
+
+function HealthBreakdown({ item }: { item: PositionDiagnosisResult }) {
+  const score = getHealthScore(item)
+  const level = getHealthLevel(item)
+  const cfg = healthCfg(level)
+  const factors = healthFactors(item)
+
+  return (
+    <div className={`rounded-lg border px-3 py-2.5 ${cfg.border} ${cfg.bg}`}>
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-[10px] font-mono text-ink-muted uppercase tracking-wider">健康分拆解</p>
+        <span className={`text-xs font-mono font-bold ${cfg.text}`}>{score} 分 · {cfg.label}</span>
+      </div>
+      <div className="space-y-1.5">
+        {factors.map((f, idx) => (
+          <div key={`${f.label}-${idx}`} className="flex items-center justify-between text-[10px] font-mono">
+            <span className="text-ink-secondary">{f.label} · {f.note}</span>
+            <span className={f.delta >= 0 ? 'text-accent-green font-semibold' : 'text-red-300 font-semibold'}>
+              {f.delta >= 0 ? `+${f.delta}` : f.delta}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function EventRiskStrip({ events }: { events: RiskEventItem[] }) {
   if (!events || events.length === 0) return null
   const top = events[0]
@@ -298,7 +398,10 @@ function StatsBar({ items }: { items: PositionDiagnosisResult[] }) {
   const totalPnl  = totalMkt - totalCost
   const pnlPct    = totalCost > 0 ? totalPnl / totalCost : 0
   const stopCount = items.filter(i => i.signal === 'STOP_LOSS').length
-  const tCount    = items.filter(i => i.signal === 'BUY_T' || i.signal === 'SELL_T').length
+  const avgHealth = items.length > 0
+    ? Math.round(items.reduce((s, i) => s + getHealthScore(i), 0) / items.length)
+    : 0
+  const lowHealth = items.filter(i => getHealthScore(i) < 45).length
 
   return (
     <div className="grid grid-cols-5 gap-3">
@@ -309,9 +412,9 @@ function StatsBar({ items }: { items: PositionDiagnosisResult[] }) {
       <Stat label="止损警报" value={stopCount.toString()}
         sub={stopCount > 0 ? '⚠ 需立即处理' : '✓ 全部安全'}
         vc={stopCount > 0 ? 'text-red-400' : 'text-ink-muted'} pulse={stopCount > 0} />
-      <Stat label="做T机会" value={tCount.toString()}
-        sub={tCount > 0 ? '可操作' : '暂无'}
-        vc={tCount > 0 ? 'text-amber-400' : 'text-ink-muted'} />
+      <Stat label="健康均分" value={`${avgHealth}`}
+        sub={lowHealth > 0 ? `${lowHealth} 只需优先处理` : '整体可控'}
+        vc={avgHealth >= 70 ? 'text-accent-green' : avgHealth >= 45 ? 'text-amber-400' : 'text-red-400'} />
       <div className="bg-terminal-panel border border-terminal-border rounded-xl p-4 flex items-center gap-3">
         <MiniPie data={items.map(i => ({ value: i.snapshot.price * i.position.quantity }))} />
         <div className="min-w-0 flex-1">
@@ -328,6 +431,93 @@ function StatsBar({ items }: { items: PositionDiagnosisResult[] }) {
           })}
           {items.length > 3 && <p className="text-[10px] text-ink-muted font-mono">+{items.length - 3} 只</p>}
         </div>
+      </div>
+    </div>
+  )
+}
+
+function PriorityQueue({ items, onPick }: {
+  items: PositionDiagnosisResult[]
+  onPick: (item: PositionDiagnosisResult) => void
+}) {
+  const top = [...items]
+    .sort((a, b) => getHealthScore(a) - getHealthScore(b) || SIGNAL_CFG[a.signal].priority - SIGNAL_CFG[b.signal].priority)
+    .slice(0, 3)
+
+  if (top.length === 0) return null
+
+  return (
+    <div className="bg-terminal-panel border border-terminal-border rounded-xl p-3">
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-[10px] text-ink-muted font-mono uppercase tracking-wider">优先处理名单（最低健康分 Top 3）</p>
+        <p className="text-[10px] font-mono text-red-300">先处理分数低的</p>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+        {top.map((item, idx) => {
+          const score = getHealthScore(item)
+          const level = getHealthLevel(item)
+          const cfg = healthCfg(level)
+          return (
+            <button
+              key={item.stock_code}
+              onClick={() => onPick(item)}
+              className={`text-left rounded-lg border px-3 py-2 transition-colors hover:bg-terminal-muted/30 ${cfg.border} ${cfg.bg}`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-mono text-ink-muted">#{idx + 1}</span>
+                <span className={`text-[10px] font-mono font-bold ${cfg.text}`}>{score} 分</span>
+              </div>
+              <p className="mt-1 text-sm font-mono text-ink-primary">{item.stock_code}</p>
+              <p className="text-[10px] text-ink-secondary line-clamp-1">{item.snapshot.action_summary || item.action_directive}</p>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function TrendSparkline({ points }: { points: { score: number }[] }) {
+  if (!points || points.length === 0) return null
+  const w = 120
+  const h = 32
+  const step = points.length <= 1 ? w : w / (points.length - 1)
+  const toY = (score: number) => {
+    const clamped = Math.max(0, Math.min(100, score))
+    return h - (clamped / 100) * h
+  }
+  const d = points.map((p, idx) => `${idx * step},${toY(p.score)}`).join(' ')
+  const last = points[points.length - 1]
+  const color = last.score < 45 ? '#ff4d6a' : last.score < 70 ? '#f59e0b' : '#00d97e'
+  return (
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="flex-shrink-0">
+      <polyline points={d} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+      <circle cx={w} cy={toY(last.score)} r="2.5" fill={color} />
+    </svg>
+  )
+}
+
+function HealthTrendPanel({ items }: { items: HealthTrendItem[] }) {
+  if (!items || items.length === 0) return null
+  return (
+    <div className="bg-terminal-panel border border-terminal-border rounded-xl p-3">
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-[10px] text-ink-muted font-mono uppercase tracking-wider">健康分 7 天趋势</p>
+        <p className="text-[10px] font-mono text-ink-muted">越往上越健康</p>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+        {items.slice(0, 3).map((it) => (
+          <div key={it.stock_code} className="rounded-lg border border-terminal-border bg-terminal-bg/40 px-3 py-2 flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-sm font-mono text-ink-primary">{it.stock_code}</p>
+              <p className="text-[10px] text-ink-secondary truncate">{it.stock_name}</p>
+              <p className={`text-[10px] font-mono mt-0.5 ${it.current_score < 45 ? 'text-red-300' : it.current_score < 70 ? 'text-amber-300' : 'text-accent-green'}`}>
+                当前 {it.current_score} 分
+              </p>
+            </div>
+            <TrendSparkline points={it.trend} />
+          </div>
+        ))}
       </div>
     </div>
   )
@@ -352,9 +542,16 @@ function ActionZone({ item, onModal }: { item: PositionDiagnosisResult; onModal:
   const inLoss = s.pnl_pct < 0
   const net    = tNet(s.price, s.avg_cost)
   const covered = net >= 0.001
+  const score = getHealthScore(item)
+  const levelCfg = healthCfg(getHealthLevel(item))
 
   return (
     <div className="flex flex-col gap-2 w-[148px] flex-shrink-0">
+      <div className={`rounded-lg border px-2 py-2 text-center ${levelCfg.border} ${levelCfg.bg}`}>
+        <p className="text-[9px] font-mono text-ink-muted uppercase tracking-wider">健康分</p>
+        <p className={`text-xs font-mono font-bold mt-0.5 ${levelCfg.text}`}>{score}</p>
+      </div>
+
       {/* 信号 */}
       <div className={`flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-lg border text-xs font-bold ${cfg.textCls} ${cfg.bgCls} ${cfg.borderCls} ${cfg.glow ? 'animate-pulse' : ''}`}>
         {cfg.icon} <span className="text-[11px] text-center leading-tight">{cfg.short}</span>
@@ -440,6 +637,7 @@ function PositionCard({ item, events, onModal }: { item: PositionDiagnosisResult
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-sm font-bold text-ink-primary font-mono">{item.stock_code}</span>
               <span className="text-xs text-ink-secondary">{item.stock_name}</span>
+              <HealthPill item={item} />
               {canDoT && (
                 <span className="px-1.5 py-0.5 text-[9px] font-mono font-bold rounded bg-accent-green/15 border border-accent-green/30 text-accent-green">✦ 可做T</span>
               )}
@@ -676,6 +874,10 @@ function DiagModal({ item, cachedAI, onClose, onAIResult }: {
             </div>
           )}
 
+          <div className="px-5 pt-4 pb-3 border-b border-terminal-border">
+            <HealthBreakdown item={item} />
+          </div>
+
           {/* 量化依据 */}
           {s.reasons && s.reasons.length > 0 && (
             <div className="px-5 pt-4 pb-3 border-b border-terminal-border">
@@ -775,7 +977,15 @@ function SyncModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () 
     if (!form.stock_code || !form.avg_cost || !form.quantity) { setErr('请填写代码、均价和持仓数量'); return }
     setLoading(true); setErr('')
     try {
-      await syncPosition({ ...form } as SyncPositionRequest)
+      const payload: SyncPositionRequest = {
+        stock_code: form.stock_code,
+        avg_cost: form.avg_cost,
+        quantity: form.quantity,
+        available_qty: form.available_qty,
+        bought_at: form.bought_at,
+        buy_reason: form.buy_reason,
+      }
+      await syncPosition(payload)
       onSuccess(); onClose()
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : '同步失败')
@@ -806,7 +1016,7 @@ function SyncModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () 
               <label className="block text-[11px] text-ink-muted font-mono mb-1">
                 {label} <span className="opacity-50">— {hint}</span>
               </label>
-              <input type={type} placeholder={ph} value={(form as Record<string, unknown>)[key] as string || ''}
+              <input type={type} placeholder={ph} value={String(form[key] ?? '')}
                 onChange={e => set(key, e.target.value)}
                 className="w-full bg-terminal-bg border border-terminal-border rounded-lg px-3 py-2 text-sm text-ink-primary font-mono placeholder:text-ink-muted/30 focus:outline-none focus:border-accent-green/50 transition-colors" />
             </div>
@@ -868,27 +1078,33 @@ function Skeleton() {
 
 // ── 主页面 ────────────────────────────────────────────────────────
 export default function PortfolioGuardian() {
+  const navigate = useNavigate()
   const [items, setItems]       = useState<PositionDiagnosisResult[]>([])
   const [loading, setLoading]   = useState(false)
   const [error, setError]       = useState('')
+  const [todoActionError, setTodoActionError] = useState('')
+  const [todoGenerating, setTodoGenerating] = useState(false)
   const [updated, setUpdated]   = useState<Date | null>(null)
-  const [sortBy, setSortBy]     = useState<'priority' | 'pnl'>('priority')
+  const [sortBy, setSortBy]     = useState<'priority' | 'pnl' | 'health'>('priority')
   const [showSync, setShowSync] = useState(false)
   const [modalItem, setModalItem] = useState<PositionDiagnosisResult | null>(null)
   const [cd, setCd]             = useState(AUTO_REFRESH_SEC)
   const [eventMap, setEventMap] = useState<Record<string, RiskEventItem[]>>({})
+  const [healthTrend, setHealthTrend] = useState<HealthTrendItem[]>([])
   const aiCache = useRef<Map<string, PositionAIResult>>(new Map())
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const diagnose = useCallback(async () => {
     setLoading(true); setError(''); setCd(AUTO_REFRESH_SEC)
     try {
-      const [diagRes, eventRes] = await Promise.all([
+      const [diagRes, eventRes, trendRes] = await Promise.all([
         fetchPositionDiagnosis(),
         fetchEventCalendar(7),
+        fetchHealthTrend(7),
       ])
       const list = diagRes.data.data?.items ?? []
       setItems(list)
+      setHealthTrend(trendRes.data.data?.items ?? [])
       const events = eventRes.data.data?.items ?? []
       const grouped: Record<string, RiskEventItem[]> = {}
       for (const ev of events) {
@@ -918,13 +1134,33 @@ export default function PortfolioGuardian() {
   const sorted = useMemo(() => [...items].sort((a, b) =>
     sortBy === 'priority'
       ? SIGNAL_CFG[a.signal].priority - SIGNAL_CFG[b.signal].priority
-      : a.snapshot.pnl_pct - b.snapshot.pnl_pct
+      : sortBy === 'pnl'
+      ? a.snapshot.pnl_pct - b.snapshot.pnl_pct
+      : getHealthScore(a) - getHealthScore(b)
   ), [items, sortBy])
 
   const stopCount = items.filter(i => i.signal === 'STOP_LOSS').length
+  const lowHealthCount = items.filter(i => getHealthScore(i) < 70).length
   const currentModalItem = modalItem
     ? (items.find(i => i.stock_code === modalItem.stock_code) ?? modalItem)
     : null
+
+  const handleGenerateLowHealthTodo = async () => {
+    setTodoActionError('')
+    if (lowHealthCount <= 0) {
+      setTodoActionError('当前没有低健康分仓位，无需生成待办')
+      return
+    }
+    try {
+      setTodoGenerating(true)
+      await generateLowHealthTodo({ limit: Math.min(3, lowHealthCount) })
+      navigate('/risk-center')
+    } catch (e: unknown) {
+      setTodoActionError(e instanceof Error ? e.message : '生成今日清单失败')
+    } finally {
+      setTodoGenerating(false)
+    }
+  }
 
   return (
     <div className="flex flex-col h-full bg-terminal-bg overflow-hidden">
@@ -957,11 +1193,15 @@ export default function PortfolioGuardian() {
               </div>
             )}
             <div className="flex rounded-lg border border-terminal-border overflow-hidden text-[10px] font-mono">
-              {[{ k: 'priority', l: '按信号' }, { k: 'pnl', l: '按盈亏' }].map(({ k, l }) => (
+              {[{ k: 'priority', l: '按信号' }, { k: 'pnl', l: '按盈亏' }, { k: 'health', l: '按健康分' }].map(({ k, l }) => (
                 <button key={k} onClick={() => setSortBy(k as typeof sortBy)}
                   className={`px-2.5 py-1.5 transition-colors ${sortBy === k ? 'bg-terminal-muted text-ink-primary' : 'text-ink-muted hover:text-ink-secondary'}`}>{l}</button>
               ))}
             </div>
+            <button onClick={handleGenerateLowHealthTodo} disabled={todoGenerating || lowHealthCount === 0}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-500/35 text-[11px] font-mono text-amber-300 hover:bg-amber-500/10 disabled:opacity-50 disabled:cursor-not-allowed transition-all">
+              {todoGenerating ? '生成中...' : `生成今日清单${lowHealthCount > 0 ? ` (${Math.min(3, lowHealthCount)})` : ''}`}
+            </button>
             <button onClick={() => setShowSync(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-terminal-border text-[11px] font-mono text-ink-secondary hover:text-accent-green hover:border-accent-green/40 transition-all">
               <Plus size={12} /> 录入持仓
@@ -981,9 +1221,16 @@ export default function PortfolioGuardian() {
             <AlertTriangle size={13} /> {error}
           </div>
         )}
+        {todoActionError && (
+          <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/25 rounded-xl text-red-400 text-xs font-mono">
+            <AlertTriangle size={13} /> {todoActionError}
+          </div>
+        )}
 
         {!loading && items.length === 0 && !error && <EmptyState onSync={() => setShowSync(true)} onDiag={diagnose} />}
         {items.length > 0 && <StatsBar items={items} />}
+        {healthTrend.length > 0 && <HealthTrendPanel items={healthTrend} />}
+        {items.length > 0 && <PriorityQueue items={items} onPick={setModalItem} />}
         {sorted.length > 0 && (
           <div className="space-y-3">
             {sorted.map(item => (

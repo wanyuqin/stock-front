@@ -4,12 +4,6 @@ import type { ValuationStatus } from '@/types'
 // 辅助
 // ─────────────────────────────────────────────────────────────────
 
-/** 把 0-100 的分位值映射到半圆弧的角度（-90° ~ +90°，从左到右） */
-function percentileToAngle(pct: number): number {
-  // 分位 0 → -90°，分位 100 → +90°
-  return (pct / 100) * 180 - 90
-}
-
 /** 极坐标转 SVG XY（圆心在 cx,cy，半径 r，角度从 9点钟方向顺时针） */
 function polar(cx: number, cy: number, r: number, angleDeg: number) {
   const rad = ((angleDeg - 90) * Math.PI) / 180
