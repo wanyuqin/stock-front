@@ -5,7 +5,7 @@ import {
   TrendingUp, TrendingDown, Minus,
   BarChart2, Activity, DollarSign,
   BrainCircuit, Banknote, PieChart, Target,
-  Gauge, X, ChevronRight,
+  Gauge, X, ChevronRight, Database, Loader2, CheckCircle2,
 } from 'lucide-react'
 import Topbar from '@/components/Topbar'
 import KLineChart from '@/components/KLineChart'
@@ -23,6 +23,8 @@ import {
 } from '@/api/stock'
 import { fetchBuyPlansByCode } from '@/api/buyPlan'
 import { fetchStockScore } from '@/api/stockScore'
+import { startKlineSync, getKlineSyncStatus } from '@/api/klineSync'
+import type { KlineSyncState } from '@/api/klineSync'
 import {
   getPriceColor, formatRate, formatPrice,
   formatAmount, formatVolume, ErrorBanner,
@@ -78,6 +80,72 @@ function ChartToolbar({
   )
 }
 
+// ── K 线同步按钮 ──────────────────────────────────────────────────
+
+function KlineSyncButton({ code }: { code: string }) {
+  const [state, setState]   = useState<KlineSyncState>('idle')
+  const [loading, setLoading] = useState(false)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // 初始化：查一次状态
+  useEffect(() => {
+    getKlineSyncStatus(code)
+      .then(r => setState(r.data.data.sync_state))
+      .catch(() => {})
+  }, [code])
+
+  // running 时每 3 秒轮询
+  useEffect(() => {
+    if (state === 'running') {
+      pollRef.current = setInterval(async () => {
+        try {
+          const r = await getKlineSyncStatus(code)
+          const newState = r.data.data.sync_state
+          setState(newState)
+          if (newState !== 'running') {
+            if (pollRef.current) clearInterval(pollRef.current)
+          }
+        } catch {}
+      }, 3000)
+    }
+    return () => { if (pollRef.current) clearInterval(pollRef.current) }
+  }, [state, code])
+
+  const handleClick = async () => {
+    if (loading || state === 'running') return
+    setLoading(true)
+    try {
+      await startKlineSync(code)
+      setState('running')
+    } catch {}
+    setLoading(false)
+  }
+
+  const icon = state === 'done'
+    ? <CheckCircle2 size={11} className="text-accent-green" />
+    : state === 'running' || loading
+    ? <Loader2 size={11} className="animate-spin" />
+    : <Database size={11} />
+
+  const label = state === 'done' ? '已同步' : state === 'running' ? '同步中' : '同步K线'
+  const cls = state === 'done'
+    ? 'border-accent-green/30 text-accent-green bg-accent-green/5'
+    : state === 'running'
+    ? 'border-accent-blue/30 text-accent-blue bg-accent-blue/5'
+    : 'border-terminal-border text-ink-muted hover:text-ink-primary hover:border-terminal-border'
+
+  return (
+    <button
+      onClick={handleClick}
+      disabled={loading || state === 'running'}
+      className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-mono border transition-all ${cls}`}
+    >
+      {icon}
+      {label}
+    </button>
+  )
+}
+
 // ── 综合评分浮层 ──────────────────────────────────────────────────
 
 function ScoreGauge({ score, level }: { score: number; level: string }) {
@@ -85,9 +153,8 @@ function ScoreGauge({ score, level }: { score: number; level: string }) {
     level === 'go'      ? { ring: '#22c55e', text: 'text-accent-green' } :
     level === 'caution' ? { ring: '#f59e0b', text: 'text-accent-amber' } :
                           { ring: '#ef4444', text: 'text-accent-red'   }
-  const dash = 2 * Math.PI * 28 // circumference r=28
+  const dash = 2 * Math.PI * 28
   const offset = dash * (1 - score / 100)
-
   return (
     <div className="relative w-16 h-16 flex items-center justify-center flex-shrink-0">
       <svg width="64" height="64" viewBox="0 0 64 64" className="absolute inset-0 -rotate-90">
@@ -101,30 +168,22 @@ function ScoreGauge({ score, level }: { score: number; level: string }) {
   )
 }
 
-function ScorePanel({
-  code, onClose,
-}: { code: string; onClose: () => void }) {
+function ScorePanel({ code, onClose }: { code: string; onClose: () => void }) {
   const { data: score, loading, error, refetch } = useQuery(
     useCallback(() => fetchStockScore(code), [code]),
     { enabled: true },
   )
-
   const verdictStyle =
     score?.verdict_level === 'go'      ? 'bg-accent-green/10 border-accent-green/40 text-accent-green' :
     score?.verdict_level === 'caution' ? 'bg-accent-amber/10 border-accent-amber/40 text-accent-amber' :
                                          'bg-accent-red/10 border-accent-red/40 text-accent-red'
-
   const levelColor = (l: string) =>
-    l === 'good'   ? 'text-accent-green' :
-    l === 'bad'    ? 'text-accent-red'   : 'text-ink-secondary'
-
+    l === 'good' ? 'text-accent-green' : l === 'bad' ? 'text-accent-red' : 'text-ink-secondary'
   const barColor = (l: string) =>
-    l === 'good' ? 'bg-accent-green' :
-    l === 'bad'  ? 'bg-accent-red'   : 'bg-accent-amber'
+    l === 'good' ? 'bg-accent-green' : l === 'bad' ? 'bg-accent-red' : 'bg-accent-amber'
 
   return (
     <div className="absolute top-0 right-0 w-72 z-20 card shadow-panel border border-terminal-border bg-terminal-panel animate-fade-in overflow-hidden">
-      {/* 头部 */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-terminal-border">
         <div className="flex items-center gap-2">
           <Gauge size={14} className="text-accent-cyan" />
@@ -139,7 +198,6 @@ function ScorePanel({
           </button>
         </div>
       </div>
-
       <div className="p-4">
         {loading && !score && (
           <div className="space-y-3">
@@ -151,7 +209,6 @@ function ScorePanel({
         {error && <div className="text-xs text-accent-red font-mono">{error}</div>}
         {score && (
           <>
-            {/* 总分 + 结论 */}
             <div className="flex items-center gap-3 mb-4">
               <ScoreGauge score={score.total_score} level={score.verdict_level} />
               <div className="flex-1 min-w-0">
@@ -161,8 +218,6 @@ function ScorePanel({
                 <p className="text-[11px] text-ink-muted leading-relaxed">{score.summary}</p>
               </div>
             </div>
-
-            {/* 分维度评分 */}
             <div className="space-y-2.5 mb-4">
               {score.items.map(item => (
                 <div key={item.name}>
@@ -173,17 +228,13 @@ function ScorePanel({
                     </span>
                   </div>
                   <div className="h-1.5 bg-terminal-muted rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all duration-500 ${barColor(item.level)}`}
-                      style={{ width: `${(item.score / item.max) * 100}%` }}
-                    />
+                    <div className={`h-full rounded-full transition-all duration-500 ${barColor(item.level)}`}
+                      style={{ width: `${(item.score / item.max) * 100}%` }} />
                   </div>
                   <p className="text-[10px] text-ink-muted mt-0.5 leading-relaxed">{item.desc}</p>
                 </div>
               ))}
             </div>
-
-            {/* 关键价位参考 */}
             {(score.ma20 > 0 || score.support > 0) && (
               <div className="pt-3 border-t border-terminal-border">
                 <div className="text-[10px] font-mono text-ink-muted uppercase tracking-wider mb-2">关键价位</div>
@@ -222,7 +273,7 @@ function ScorePanel({
   )
 }
 
-// ── MoneyFlowPanel（保留原样）────────────────────────────────────
+// ── MoneyFlowPanel ────────────────────────────────────────────────
 
 function formatYuan(yuan: number) {
   const abs = Math.abs(yuan)
@@ -295,8 +346,8 @@ function PanKouBar({ bigBuy, bigSell, smlBuy, smlSell }: {
 
 function MoneyFlowPanel({ code }: { code: string }) {
   const [refreshing, setRefreshing] = useState(false)
-  const [liveData, setLiveData] = useState<QTFlow | null>(null)
-  const [liveErr, setLiveErr] = useState('')
+  const [liveData, setLiveData]     = useState<QTFlow | null>(null)
+  const [liveErr, setLiveErr]       = useState('')
 
   const handleRefresh = async () => {
     setRefreshing(true); setLiveErr('')
@@ -372,15 +423,15 @@ export default function StockDetail() {
   const { code = '' } = useParams<{ code: string }>()
   const navigate = useNavigate()
   const [chartMode, setChartMode] = useState<ChartMode>('daily')
-  const [period, setPeriod] = useState<Period>(120)
+  const [period, setPeriod]       = useState<Period>(120)
   const [inWatchlist, setInWatchlist] = useState<boolean | null>(null)
-  const [rightTab, setRightTab] = useState<RightTab>('ai')
+  const [rightTab, setRightTab]   = useState<RightTab>('ai')
   const [showScore, setShowScore] = useState(false)
 
-  const [bigDealData, setBigDealData] = useState<BigDealSummary | null>(null)
-  const lastToastAmtRef = useRef<number>(0)
-  const [smartSummary, setSmartSummary] = useState<string>('')
-  const summaryTriggeredRef = useRef(false)
+  const [bigDealData, setBigDealData]     = useState<BigDealSummary | null>(null)
+  const lastToastAmtRef                   = useRef<number>(0)
+  const [smartSummary, setSmartSummary]   = useState<string>('')
+  const summaryTriggeredRef               = useRef(false)
 
   useEffect(() => {
     if (!bigDealData || summaryTriggeredRef.current) return
@@ -421,19 +472,15 @@ export default function StockDetail() {
   const { data: analysis, loading: analysisLoading, error: analysisError, refetch: refetchAnalysis } = useQuery(
     useCallback(() => fetchAnalysis(code), [code]), { enabled: false },
   )
-
-  // 买入计划（用于 K 线图标注）
   const { data: buyPlanData } = useQuery(
     useCallback(() => fetchBuyPlansByCode(code), [code]),
   )
   const activeBuyPlans: BuyPlan[] = (buyPlanData?.items ?? []).filter(
     p => p.status === 'WATCHING' || p.status === 'READY'
   )
-
   useQuery(useCallback(() => fetchWatchlist(), []), {
     onSuccess: (wl) => setInWatchlist(wl.items.some(i => i.stock_code === code)),
   })
-
   const { data: diagData } = useQuery(useCallback(() => fetchPositionDiagnosis(), []))
   const positionCost = diagData?.items?.find(i => i.stock_code === code)?.position?.avg_cost
 
@@ -534,7 +581,6 @@ export default function StockDetail() {
                     )}
                   </>
                 )}
-                {/* 买入计划标注提示 */}
                 {activeBuyPlans.length > 0 && chartMode === 'daily' && (
                   <span className="tag" style={{ color: '#4ade80', borderColor: 'rgba(74,222,128,0.3)' }}>
                     {activeBuyPlans.filter(p => p.trigger_hit).length > 0 ? '⚡' : '●'} {activeBuyPlans.length} 个买入计划
@@ -547,6 +593,8 @@ export default function StockDetail() {
                   period={period} onPeriodChange={setPeriod}
                   loading={klineLoading || minuteLoading}
                 />
+                {/* ★ K线同步按钮 */}
+                <KlineSyncButton code={code} />
                 {/* 综合评分按钮 */}
                 <div className="relative">
                   <button
@@ -561,9 +609,7 @@ export default function StockDetail() {
                     评分
                     <ChevronRight size={9} className={`transition-transform ${showScore ? 'rotate-90' : ''}`} />
                   </button>
-                  {showScore && (
-                    <ScorePanel code={code} onClose={() => setShowScore(false)} />
-                  )}
+                  {showScore && <ScorePanel code={code} onClose={() => setShowScore(false)} />}
                 </div>
               </div>
             </div>
@@ -627,7 +673,6 @@ export default function StockDetail() {
                 ))}
               </div>
             )}
-
             <div className="flex-shrink-0 flex border-b border-terminal-border overflow-x-auto">
               {([
                 { key: 'ai',        label: 'AI',      icon: BrainCircuit },
@@ -651,19 +696,13 @@ export default function StockDetail() {
                 </button>
               ))}
             </div>
-
             <div className="flex-1 overflow-hidden overflow-y-auto">
-              {rightTab === 'ai' ? (
-                <AIReportPanel data={analysis} loading={analysisLoading} error={analysisError} onRefresh={refetchAnalysis} smartSummary={smartSummary} />
-              ) : rightTab === 'moneyflow' ? (
-                <MoneyFlowPanel code={code} />
-              ) : rightTab === 'bigdeal' ? (
-                <BigDealPanel code={code} changeRate={quote?.change_rate} onDataLoaded={setBigDealData} />
-              ) : rightTab === 'valuation' ? (
-                <ValuationPanel code={code} />
-              ) : (
-                <BuyPlanPanel code={code} stockName={quote?.name ?? code} currentPrice={quote?.price} />
-              )}
+              {rightTab === 'ai'        ? <AIReportPanel data={analysis} loading={analysisLoading} error={analysisError} onRefresh={refetchAnalysis} smartSummary={smartSummary} /> :
+               rightTab === 'moneyflow' ? <MoneyFlowPanel code={code} /> :
+               rightTab === 'bigdeal'   ? <BigDealPanel code={code} changeRate={quote?.change_rate} onDataLoaded={setBigDealData} /> :
+               rightTab === 'valuation' ? <ValuationPanel code={code} /> :
+                                          <BuyPlanPanel code={code} stockName={quote?.name ?? code} currentPrice={quote?.price} />
+              }
             </div>
           </div>
         </div>

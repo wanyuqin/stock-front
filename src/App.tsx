@@ -14,6 +14,7 @@ import MorningBriefPage from '@/pages/MorningBriefPage'
 import EquityCurvePage from '@/pages/EquityCurvePage'
 import SectorHeatmapPage from '@/pages/SectorHeatmapPage'
 import RiskCenterPage from '@/pages/RiskCenterPage'
+import KlineLibraryPage from '@/pages/KlineLibraryPage'
 import ReportToast from '@/components/ReportToast'
 
 export default function App() {
@@ -34,7 +35,8 @@ export default function App() {
           <Route path="intel"           element={<IntelStation />}       />
           <Route path="equity"          element={<EquityCurvePage />}    />
           <Route path="sector-heatmap"  element={<SectorHeatmapPage />}  />
-          <Route path="risk-center"     element={<RiskCenterPage />}   />
+          <Route path="risk-center"     element={<RiskCenterPage />}     />
+          <Route path="kline-library"   element={<KlineLibraryPage />}   />
           <Route path="stocks/:code"    element={<StockDetail />}        />
           <Route path="*"               element={<Navigate to="/" replace />} />
         </Route>

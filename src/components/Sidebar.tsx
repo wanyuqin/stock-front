@@ -2,7 +2,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Star, ScrollText, ScanLine, Radar,
   Shield, Settings, ChevronRight, Brain, Newspaper,
-  Target, Sunrise, TrendingUp, Flame, ShieldAlert,
+  Target, Sunrise, TrendingUp, Flame, ShieldAlert, Database,
 } from 'lucide-react'
 
 const NAV_ITEMS = [
@@ -15,8 +15,9 @@ const NAV_ITEMS = [
       { to: '/buy-plans',      icon: Target,          label: '买入计划',   badge: null  },
       { to: '/scan',           icon: ScanLine,        label: '信号扫描',   badge: null  },
       { to: '/radar',          icon: Radar,           label: '机会雷达',   badge: null  },
-      { to: '/sector-heatmap', icon: Flame,           label: '板块热力',   badge: 'NEW' },
+      { to: '/sector-heatmap', icon: Flame,           label: '板块热力',   badge: null  },
       { to: '/intel',          icon: Newspaper,       label: '研报情报站', badge: null  },
+      { to: '/kline-library',  icon: Database,        label: 'K线数据库',  badge: null  },
     ],
   },
   {
@@ -25,8 +26,8 @@ const NAV_ITEMS = [
       { to: '/guardian', icon: Shield,      label: '持仓守护', badge: null  },
       { to: '/review',   icon: Brain,       label: '深度复盘', badge: 'AI'  },
       { to: '/trades',   icon: ScrollText,  label: '交易日志', badge: null  },
-      { to: '/equity',      icon: TrendingUp,  label: '账户绩效', badge: 'NEW' },
-      { to: '/risk-center', icon: ShieldAlert,label: '风险中心', badge: 'NEW' },
+      { to: '/equity',   icon: TrendingUp,  label: '账户绩效', badge: null  },
+      { to: '/risk-center', icon: ShieldAlert, label: '风险中心', badge: null },
     ],
   },
 ]

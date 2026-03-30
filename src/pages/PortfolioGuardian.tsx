@@ -8,7 +8,7 @@ import {
   Shield, RefreshCw, Plus, X, Brain, AlertTriangle,
   TrendingUp, TrendingDown, Activity, Zap, Clock,
   ArrowRight, Target, BarChart2, ChevronRight, Sparkles,
-  Calendar, MessageSquare,
+  Calendar, MessageSquare, ChevronDown, ChevronUp,
 } from 'lucide-react'
 import { fetchPositionDiagnosis, analyzePosition, syncPosition } from '@/api/stock'
 import { fetchEventCalendar, fetchHealthTrend, generateLowHealthTodo } from '@/api/risk'
@@ -220,7 +220,7 @@ function TargetProgress({ snap }: { snap: DiagnosticSnapshot }) {
         <span className="flex items-center gap-1 text-ink-muted uppercase tracking-wider">
           <Target size={9} /> 距目标价
         </span>
-        <span className={`font-semibold ${snap.near_target_notice ? 'text-accent-green animate-pulse' : 'text-ink-secondary'}`}>
+        <span className={`font-semibold ${snap.near_target_notice ? 'text-accent-green' : 'text-ink-secondary'}`}>
           {distPct != null
             ? snap.near_target_notice
               ? `🎯 仅剩 ${distPct.toFixed(1)}%，考虑止盈！`
@@ -392,6 +392,21 @@ function MiniPie({ data, size = 52 }: { data: { value: number }[]; size?: number
   )
 }
 
+function SectionHead({ title, subtitle, accent = 'text-ink-muted' }: {
+  title: string
+  subtitle: string
+  accent?: string
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3 mb-3">
+      <div>
+        <p className="text-[10px] font-mono uppercase tracking-wider text-ink-muted">{title}</p>
+        <p className={`text-[10px] font-mono mt-1 ${accent}`}>{subtitle}</p>
+      </div>
+    </div>
+  )
+}
+
 function StatsBar({ items }: { items: PositionDiagnosisResult[] }) {
   const totalCost = items.reduce((s, i) => s + i.snapshot.avg_cost * i.position.quantity, 0)
   const totalMkt  = items.reduce((s, i) => s + i.snapshot.price   * i.position.quantity, 0)
@@ -404,35 +419,38 @@ function StatsBar({ items }: { items: PositionDiagnosisResult[] }) {
   const lowHealth = items.filter(i => getHealthScore(i) < 45).length
 
   return (
-    <div className="grid grid-cols-5 gap-3">
-      <Stat label="总市值" value={`¥${fYuan(totalMkt).replace(/^[+-]/, '')}`}
-        sub={`成本 ¥${fYuan(totalCost).replace(/^[+-]/, '')}`} vc="text-ink-primary" />
-      <Stat label="持仓浮盈" value={fYuan(totalPnl)} sub={fPct(pnlPct)}
-        vc={totalPnl >= 0 ? 'text-accent-green' : 'text-red-400'} />
-      <Stat label="止损警报" value={stopCount.toString()}
-        sub={stopCount > 0 ? '⚠ 需立即处理' : '✓ 全部安全'}
-        vc={stopCount > 0 ? 'text-red-400' : 'text-ink-muted'} pulse={stopCount > 0} />
-      <Stat label="健康均分" value={`${avgHealth}`}
-        sub={lowHealth > 0 ? `${lowHealth} 只需优先处理` : '整体可控'}
-        vc={avgHealth >= 70 ? 'text-accent-green' : avgHealth >= 45 ? 'text-amber-400' : 'text-red-400'} />
-      <div className="bg-terminal-panel border border-terminal-border rounded-xl p-4 flex items-center gap-3">
-        <MiniPie data={items.map(i => ({ value: i.snapshot.price * i.position.quantity }))} />
-        <div className="min-w-0 flex-1">
-          <p className="text-[10px] text-ink-muted font-mono uppercase tracking-wider mb-1.5">仓位分布</p>
-          {items.slice(0, 3).map((item, idx) => {
-            const pct = totalMkt > 0 ? (item.snapshot.price * item.position.quantity) / totalMkt : 0
-            return (
-              <div key={item.stock_code} className="flex items-center gap-1.5 mb-0.5">
-                <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: PIE_COLORS[idx] }} />
-                <span className="text-[10px] font-mono text-ink-secondary truncate">{item.stock_code}</span>
-                <span className="text-[10px] font-mono text-ink-muted ml-auto">{(pct * 100).toFixed(0)}%</span>
-              </div>
-            )
-          })}
-          {items.length > 3 && <p className="text-[10px] text-ink-muted font-mono">+{items.length - 3} 只</p>}
+    <section className="bg-terminal-panel border border-terminal-border rounded-xl p-3.5">
+      <SectionHead title="关键统计" subtitle="范围：当前全部持仓" />
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-2.5">
+        <Stat label="总市值" value={`¥${fYuan(totalMkt).replace(/^[+-]/, '')}`}
+          sub={`成本 ¥${fYuan(totalCost).replace(/^[+-]/, '')}`} vc="text-ink-primary" />
+        <Stat label="持仓浮盈" value={fYuan(totalPnl)} sub={fPct(pnlPct)}
+          vc={totalPnl >= 0 ? 'text-accent-green' : 'text-red-400'} />
+        <Stat label="止损警报" value={stopCount.toString()}
+          sub={stopCount > 0 ? '需优先处理' : '全部安全'}
+          vc={stopCount > 0 ? 'text-red-400' : 'text-ink-muted'} pulse={stopCount > 0} />
+        <Stat label="健康均分" value={`${avgHealth}`}
+          sub={lowHealth > 0 ? `${lowHealth} 只低于 45 分` : '整体可控'}
+          vc={avgHealth >= 70 ? 'text-accent-green' : avgHealth >= 45 ? 'text-amber-400' : 'text-red-400'} />
+        <div className="bg-terminal-bg border border-terminal-border rounded-lg px-3 py-2.5 flex items-center gap-3">
+          <MiniPie data={items.map(i => ({ value: i.snapshot.price * i.position.quantity }))} />
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] text-ink-muted font-mono uppercase tracking-wider mb-1.5">仓位分布</p>
+            {items.slice(0, 3).map((item, idx) => {
+              const pct = totalMkt > 0 ? (item.snapshot.price * item.position.quantity) / totalMkt : 0
+              return (
+                <div key={item.stock_code} className="flex items-center gap-1.5 mb-0.5">
+                  <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: PIE_COLORS[idx] }} />
+                  <span className="text-[10px] font-mono text-ink-secondary truncate">{item.stock_code}</span>
+                  <span className="text-[10px] font-mono text-ink-muted ml-auto">{(pct * 100).toFixed(0)}%</span>
+                </div>
+              )
+            })}
+            {items.length > 3 && <p className="text-[10px] text-ink-muted font-mono">+{items.length - 3} 只</p>}
+          </div>
         </div>
       </div>
-    </div>
+    </section>
   )
 }
 
@@ -447,12 +465,9 @@ function PriorityQueue({ items, onPick }: {
   if (top.length === 0) return null
 
   return (
-    <div className="bg-terminal-panel border border-terminal-border rounded-xl p-3">
-      <div className="flex items-center justify-between mb-2">
-        <p className="text-[10px] text-ink-muted font-mono uppercase tracking-wider">优先处理名单（最低健康分 Top 3）</p>
-        <p className="text-[10px] font-mono text-red-300">先处理分数低的</p>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+    <section className="bg-terminal-panel border border-terminal-border rounded-xl p-3.5">
+      <SectionHead title="优先处理" subtitle="范围：健康分最低 Top 3（点击查看详情）" accent="text-red-300" />
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
         {top.map((item, idx) => {
           const score = getHealthScore(item)
           const level = getHealthLevel(item)
@@ -461,7 +476,7 @@ function PriorityQueue({ items, onPick }: {
             <button
               key={item.stock_code}
               onClick={() => onPick(item)}
-              className={`text-left rounded-lg border px-3 py-2 transition-colors hover:bg-terminal-muted/30 ${cfg.border} ${cfg.bg}`}
+              className={`text-left rounded-lg border px-3 py-2.5 transition-colors hover:bg-terminal-muted/30 ${cfg.border} ${cfg.bg}`}
             >
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-mono text-ink-muted">#{idx + 1}</span>
@@ -473,7 +488,7 @@ function PriorityQueue({ items, onPick }: {
           )
         })}
       </div>
-    </div>
+    </section>
   )
 }
 
@@ -500,14 +515,11 @@ function TrendSparkline({ points }: { points: { score: number }[] }) {
 function HealthTrendPanel({ items }: { items: HealthTrendItem[] }) {
   if (!items || items.length === 0) return null
   return (
-    <div className="bg-terminal-panel border border-terminal-border rounded-xl p-3">
-      <div className="flex items-center justify-between mb-2">
-        <p className="text-[10px] text-ink-muted font-mono uppercase tracking-wider">健康分 7 天趋势</p>
-        <p className="text-[10px] font-mono text-ink-muted">越往上越健康</p>
-      </div>
+    <section className="bg-terminal-panel border border-terminal-border rounded-xl p-3.5">
+      <SectionHead title="健康趋势" subtitle="范围：近 7 天分数变化（辅助判断）" />
       <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
         {items.slice(0, 3).map((it) => (
-          <div key={it.stock_code} className="rounded-lg border border-terminal-border bg-terminal-bg/40 px-3 py-2 flex items-center justify-between gap-2">
+          <div key={it.stock_code} className="rounded-lg border border-terminal-border/70 bg-terminal-bg/30 px-3 py-2 flex items-center justify-between gap-2">
             <div className="min-w-0">
               <p className="text-sm font-mono text-ink-primary">{it.stock_code}</p>
               <p className="text-[10px] text-ink-secondary truncate">{it.stock_name}</p>
@@ -519,7 +531,7 @@ function HealthTrendPanel({ items }: { items: HealthTrendItem[] }) {
           </div>
         ))}
       </div>
-    </div>
+    </section>
   )
 }
 
@@ -527,9 +539,9 @@ function Stat({ label, value, sub, vc, pulse = false }: {
   label: string; value: string; sub: string; vc: string; pulse?: boolean
 }) {
   return (
-    <div className="bg-terminal-panel border border-terminal-border rounded-xl p-4">
+    <div className="bg-terminal-bg border border-terminal-border rounded-lg px-3 py-2.5">
       <p className="text-[10px] text-ink-muted font-mono uppercase tracking-wider mb-1">{label}</p>
-      <p className={`text-xl font-bold font-mono ${vc} ${pulse ? 'animate-pulse' : ''}`}>{value}</p>
+      <p className={`text-lg font-bold font-mono ${vc} ${pulse ? 'animate-pulse' : ''}`}>{value}</p>
       <p className="text-[10px] text-ink-muted mt-1 font-mono">{sub}</p>
     </div>
   )
@@ -542,37 +554,25 @@ function ActionZone({ item, onModal }: { item: PositionDiagnosisResult; onModal:
   const inLoss = s.pnl_pct < 0
   const net    = tNet(s.price, s.avg_cost)
   const covered = net >= 0.001
-  const score = getHealthScore(item)
-  const levelCfg = healthCfg(getHealthLevel(item))
 
   return (
-    <div className="flex flex-col gap-2 w-[148px] flex-shrink-0">
-      <div className={`rounded-lg border px-2 py-2 text-center ${levelCfg.border} ${levelCfg.bg}`}>
-        <p className="text-[9px] font-mono text-ink-muted uppercase tracking-wider">健康分</p>
-        <p className={`text-xs font-mono font-bold mt-0.5 ${levelCfg.text}`}>{score}</p>
-      </div>
-
-      {/* 信号 */}
-      <div className={`flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-lg border text-xs font-bold ${cfg.textCls} ${cfg.bgCls} ${cfg.borderCls} ${cfg.glow ? 'animate-pulse' : ''}`}>
+    <div className="w-full md:w-[150px] flex-shrink-0 flex flex-col gap-2">
+      <div className={`flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg border text-xs font-bold ${cfg.textCls} ${cfg.bgCls} ${cfg.borderCls} ${item.signal === 'STOP_LOSS' ? 'animate-pulse' : ''}`}>
         {cfg.icon} <span className="text-[11px] text-center leading-tight">{cfg.short}</span>
       </div>
 
-      {/* T+0 空间 */}
-      <div className={`rounded-lg border px-2 py-2 text-center ${covered ? 'border-accent-green/25 bg-accent-green/5' : 'border-terminal-border bg-terminal-muted/20'}`}>
-        <p className="text-[9px] font-mono text-ink-muted uppercase tracking-wider">T+0空间</p>
+      <div className={`rounded-lg border px-2 py-1.5 text-center ${covered ? 'border-accent-green/25 bg-accent-green/5' : 'border-terminal-border bg-terminal-muted/20'}`}>
+        <p className="text-[9px] font-mono text-ink-muted uppercase tracking-wider">T+0 空间</p>
         <p className={`text-xs font-mono font-bold mt-0.5 ${covered ? 'text-accent-green' : 'text-ink-muted'}`}>
           {covered ? `+${(net * 100).toFixed(3)}%` : '未覆盖'}
         </p>
-        {covered && <p className="text-[8px] text-accent-green/60 mt-0.5">卖出即获利</p>}
       </div>
 
-      {/* AI 分析 */}
       <button onClick={onModal}
         className="flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg border border-accent-cyan/30 bg-accent-cyan/5 text-[11px] font-mono text-accent-cyan hover:bg-accent-cyan/15 transition-all">
         <Sparkles size={10} /> AI 分析
       </button>
 
-      {/* 建议股数 */}
       {s.suggest_qty > 0 && (
         <div className={`rounded-lg border px-2 py-1.5 text-center ${
           item.signal === 'STOP_LOSS'
@@ -586,7 +586,6 @@ function ActionZone({ item, onModal }: { item: PositionDiagnosisResult; onModal:
         </div>
       )}
 
-      {/* 加仓禁用提示 */}
       <div className="relative group">
         <button disabled={inLoss}
           className={`w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg border text-[11px] font-mono transition-all ${
@@ -607,7 +606,19 @@ function ActionZone({ item, onModal }: { item: PositionDiagnosisResult; onModal:
 }
 
 // ── 持仓卡片 ──────────────────────────────────────────────────────
-function PositionCard({ item, events, onModal }: { item: PositionDiagnosisResult; events: RiskEventItem[]; onModal: () => void }) {
+function PositionCard({
+  item,
+  events,
+  onModal,
+  expanded,
+  onToggle,
+}: {
+  item: PositionDiagnosisResult
+  events: RiskEventItem[]
+  onModal: () => void
+  expanded: boolean
+  onToggle: () => void
+}) {
   const cfg    = SIGNAL_CFG[item.signal]
   const s      = item.snapshot
   const isStop = item.signal === 'STOP_LOSS'
@@ -626,30 +637,27 @@ function PositionCard({ item, events, onModal }: { item: PositionDiagnosisResult
   const buyReasonStr = s.plan_buy_reason || s.buy_reason || ''
 
   return (
-    <div className={`relative rounded-xl border transition-all duration-200 overflow-hidden ${isStop ? 'stop-loss-card' : `${cfg.borderCls} ${cfg.bgCls}`}`}>
+    <div className={`relative rounded-xl border bg-terminal-panel transition-all duration-200 overflow-hidden ${isStop ? 'stop-loss-card border-red-500/45' : 'border-terminal-border'}`}>
       {isStop && <div className="h-0.5 w-full animate-pulse" style={{ background: 'linear-gradient(90deg,#ff4d6a,rgba(255,77,106,.4),#ff4d6a)' }} />}
 
-      <div className="p-4 flex gap-4">
-        <div className="flex-1 min-w-0 flex flex-col gap-3">
-
-          {/* ── 头部：股票信息 + 持仓天数 + 买入理由 ── */}
-          <div>
+      <div className="p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-sm font-bold text-ink-primary font-mono">{item.stock_code}</span>
               <span className="text-xs text-ink-secondary">{item.stock_name}</span>
               <HealthPill item={item} />
               {canDoT && (
-                <span className="px-1.5 py-0.5 text-[9px] font-mono font-bold rounded bg-accent-green/15 border border-accent-green/30 text-accent-green">✦ 可做T</span>
+                <span className="px-1.5 py-0.5 text-[9px] font-mono font-bold rounded bg-accent-green/12 border border-accent-green/25 text-accent-green">可做T</span>
               )}
               {isStop && (
-                <span className="px-1.5 py-0.5 text-[9px] font-mono font-bold rounded animate-pulse bg-red-500/20 border border-red-500/40 text-red-400">⚡ 止损警报</span>
+                <span className="px-1.5 py-0.5 text-[9px] font-mono font-bold rounded bg-red-500/20 border border-red-500/40 text-red-400 animate-pulse">止损警报</span>
               )}
-              {/* 接近目标价标记 */}
               {s.near_target_notice && (
-                <span className="px-1.5 py-0.5 text-[9px] font-mono font-bold rounded bg-accent-green/20 border border-accent-green/40 text-accent-green animate-pulse">🎯 近目标价</span>
+                <span className="px-1.5 py-0.5 text-[9px] font-mono font-bold rounded bg-accent-green/12 border border-accent-green/25 text-accent-green">近目标价</span>
               )}
             </div>
-            <div className="flex items-center gap-2 mt-0.5 text-[10px] text-ink-muted font-mono flex-wrap">
+            <div className="flex items-center gap-2 mt-1 text-[10px] text-ink-muted font-mono flex-wrap">
               <span>持仓 {item.position.quantity} 股</span>
               <span className="opacity-30">·</span>
               <span>可用 {item.position.available_qty} 股</span>
@@ -664,74 +672,87 @@ function PositionCard({ item, events, onModal }: { item: PositionDiagnosisResult
                 </>
               )}
             </div>
-            {/* 买入理由 */}
             {buyReasonStr && (
               <div className="flex items-start gap-1.5 mt-1.5 text-[10px] font-mono text-ink-muted">
                 <MessageSquare size={9} className="mt-0.5 flex-shrink-0" />
-                <span className="line-clamp-1">当初买入：{buyReasonStr}</span>
+                <span className="line-clamp-1">买入逻辑：{buyReasonStr}</span>
               </div>
             )}
           </div>
 
-          {/* ── 一句话行动指令（最显眼的位置）── */}
-          <ActionBanner snap={s} signal={item.signal} />
-
-          {/* ── 事件风险预警（未来7天）── */}
-          <EventRiskStrip events={events} />
-
-          {/* ── 价格/盈亏 ── */}
-          <div className="grid grid-cols-3 gap-3">
-            <PCell label="现价"     value={`¥${f2(s.price)}`} color="text-ink-primary" />
-            <PCell label="累计盈亏" value={fPct(s.pnl_pct)} sub={fYuan(pnlAbs)}
-              color={inLoss ? 'text-red-400' : 'text-accent-green'} />
-            <PCell label="今日振幅" value={`${(s.amplitude * 100).toFixed(1)}%`}
-              color={s.amplitude >= 0.015 ? 'text-amber-400' : 'text-ink-secondary'} />
-          </div>
-
-          {/* ── 止损距离进度条 ── */}
-          <StopDistBar snap={s} />
-
-          {/* ── 目标价进度条（有关联计划时显示）── */}
-          <TargetProgress snap={s} />
-
-          {/* ── 日内博弈尺 ── */}
-          <TRuler snap={s} />
-
-          {/* ── 技术摘要 ── */}
-          <div className="flex items-center gap-2.5 text-[10px] font-mono text-ink-muted flex-wrap">
-            <span className="flex items-center gap-1">
-              <BarChart2 size={9} /> MA20
-              <span className={s.ma20_slope >= 0 ? 'text-accent-green' : 'text-red-400'}>
-                {s.ma20_slope >= 0 ? '↑上行' : '↓下行'}
-              </span>
-            </span>
-            <span className="opacity-30">·</span>
-            <span>ATR {f2(s.atr)}</span>
-            <span className="opacity-30">·</span>
-            <span className={`${s.plan_stop_loss ? 'text-accent-blue/70' : 'text-red-400/70'}`}>
-              止损 ¥{f2(effectiveStop)}
-              {s.plan_stop_loss ? ' (计划)' : ''}
-            </span>
-          </div>
-
-          {/* ── 量化决策依据 ── */}
-          {s.reasons && s.reasons.length > 0 && (
-            <div className={`rounded-lg border px-3 py-2 bg-terminal-bg/50 ${cfg.borderCls}`}>
-              <div className="flex items-center gap-1.5 mb-1">
-                <Zap size={9} className={cfg.textCls} />
-                <span className="text-[9px] font-mono text-ink-muted uppercase tracking-wider">量化依据</span>
-              </div>
-              <p className="text-xs text-ink-primary leading-relaxed line-clamp-2">{s.reasons[0]}</p>
-              <button onClick={onModal}
-                className="mt-1 flex items-center gap-0.5 text-[10px] font-mono text-ink-muted hover:text-accent-cyan transition-colors">
-                查看完整分析 <ChevronRight size={9} />
-              </button>
-            </div>
-          )}
+          <button
+            onClick={onToggle}
+            className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-terminal-border text-[10px] font-mono text-ink-muted hover:text-ink-secondary hover:border-terminal-border/80 transition-colors"
+          >
+            {expanded ? '收起详情' : '展开更多'}
+            {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+          </button>
         </div>
 
-        <div className="w-px bg-terminal-border flex-shrink-0" />
-        <ActionZone item={item} onModal={onModal} />
+        <div className="mt-3">
+          <ActionBanner snap={s} signal={item.signal} />
+        </div>
+
+        <div className="mt-3 flex flex-col md:flex-row md:items-start gap-3">
+          <div className="flex-1 min-w-0 space-y-3">
+            <div className="grid grid-cols-3 gap-3">
+              <PCell label="现价" value={`¥${f2(s.price)}`} color="text-ink-primary" />
+              <PCell
+                label="累计盈亏"
+                value={fPct(s.pnl_pct)}
+                sub={fYuan(pnlAbs)}
+                color={inLoss ? 'text-red-400' : 'text-accent-green'}
+              />
+              <PCell
+                label="今日振幅"
+                value={`${(s.amplitude * 100).toFixed(1)}%`}
+                color={s.amplitude >= 0.015 ? 'text-amber-400' : 'text-ink-secondary'}
+              />
+            </div>
+            <StopDistBar snap={s} />
+          </div>
+          <div className="hidden md:block w-px bg-terminal-border flex-shrink-0 self-stretch" />
+          <ActionZone item={item} onModal={onModal} />
+        </div>
+
+        {expanded && (
+          <div className="mt-3 pt-3 border-t border-terminal-border space-y-3 animate-fade-in">
+            <EventRiskStrip events={events} />
+            <TargetProgress snap={s} />
+            <TRuler snap={s} />
+            <div className="flex items-center gap-2.5 text-[10px] font-mono text-ink-muted flex-wrap">
+              <span className="flex items-center gap-1">
+                <BarChart2 size={9} /> MA20
+                <span className={s.ma20_slope >= 0 ? 'text-accent-green' : 'text-red-400'}>
+                  {s.ma20_slope >= 0 ? '↑上行' : '↓下行'}
+                </span>
+              </span>
+              <span className="opacity-30">·</span>
+              <span>ATR {f2(s.atr)}</span>
+              <span className="opacity-30">·</span>
+              <span className={`${s.plan_stop_loss ? 'text-accent-blue/70' : 'text-red-400/70'}`}>
+                止损 ¥{f2(effectiveStop)}
+                {s.plan_stop_loss ? ' (计划)' : ''}
+              </span>
+            </div>
+
+            {s.reasons && s.reasons.length > 0 && (
+              <div className="rounded-lg border border-terminal-border bg-terminal-bg/40 px-3 py-2.5">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <Zap size={9} className={cfg.textCls} />
+                  <span className="text-[9px] font-mono text-ink-muted uppercase tracking-wider">量化依据</span>
+                </div>
+                <p className="text-xs text-ink-primary leading-relaxed line-clamp-2">{s.reasons[0]}</p>
+                <button
+                  onClick={onModal}
+                  className="mt-1 flex items-center gap-0.5 text-[10px] font-mono text-ink-muted hover:text-accent-cyan transition-colors"
+                >
+                  查看完整分析 <ChevronRight size={9} />
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* 亏损横幅 */}
@@ -1091,6 +1112,7 @@ export default function PortfolioGuardian() {
   const [cd, setCd]             = useState(AUTO_REFRESH_SEC)
   const [eventMap, setEventMap] = useState<Record<string, RiskEventItem[]>>({})
   const [healthTrend, setHealthTrend] = useState<HealthTrendItem[]>([])
+  const [expandedMap, setExpandedMap] = useState<Record<string, boolean>>({})
   const aiCache = useRef<Map<string, PositionAIResult>>(new Map())
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -1139,6 +1161,16 @@ export default function PortfolioGuardian() {
       : getHealthScore(a) - getHealthScore(b)
   ), [items, sortBy])
 
+  useEffect(() => {
+    setExpandedMap(prev => {
+      const next: Record<string, boolean> = {}
+      for (const item of items) {
+        next[item.stock_code] = prev[item.stock_code] ?? item.signal === 'STOP_LOSS'
+      }
+      return next
+    })
+  }, [items])
+
   const stopCount = items.filter(i => i.signal === 'STOP_LOSS').length
   const lowHealthCount = items.filter(i => getHealthScore(i) < 70).length
   const currentModalItem = modalItem
@@ -1164,17 +1196,17 @@ export default function PortfolioGuardian() {
 
   return (
     <div className="flex flex-col h-full bg-terminal-bg overflow-hidden">
-      <header className="flex-shrink-0 px-6 py-3.5 border-b border-terminal-border bg-terminal-panel">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className={`w-8 h-8 rounded-lg border flex items-center justify-center ${stopCount > 0 ? 'border-red-500/40 bg-red-500/10' : 'border-terminal-border bg-terminal-muted'}`}>
+      <header className="flex-shrink-0 px-6 py-3.5 border-b border-terminal-border bg-terminal-panel space-y-3">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className={`w-8 h-8 rounded-lg border flex items-center justify-center flex-shrink-0 ${stopCount > 0 ? 'border-red-500/40 bg-red-500/10' : 'border-terminal-border bg-terminal-muted'}`}>
               <Shield size={15} className={stopCount > 0 ? 'text-red-400 animate-pulse' : 'text-accent-green'} />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <h1 className="text-sm font-semibold text-ink-primary">持仓守护</h1>
                 {stopCount > 0 && (
-                  <span className="px-2 py-0.5 text-[10px] font-mono font-bold rounded-full bg-red-500/15 border border-red-500/40 text-red-400 animate-pulse">
+                  <span className="px-2 py-0.5 text-[10px] font-mono font-bold rounded-full bg-red-500/15 border border-red-500/40 text-red-400">
                     {stopCount} 只止损警报
                   </span>
                 )}
@@ -1186,32 +1218,35 @@ export default function PortfolioGuardian() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap justify-end">
+          <div className="flex items-center gap-2 text-[10px] font-mono text-ink-muted">
             {items.length > 0 && !loading && (
-              <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-terminal-muted border border-terminal-border text-[10px] font-mono text-ink-muted">
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-terminal-muted/60 border border-terminal-border/80">
                 <Clock size={10} /> {cd}s 后自动刷新
               </div>
             )}
-            <div className="flex rounded-lg border border-terminal-border overflow-hidden text-[10px] font-mono">
-              {[{ k: 'priority', l: '按信号' }, { k: 'pnl', l: '按盈亏' }, { k: 'health', l: '按健康分' }].map(({ k, l }) => (
-                <button key={k} onClick={() => setSortBy(k as typeof sortBy)}
-                  className={`px-2.5 py-1.5 transition-colors ${sortBy === k ? 'bg-terminal-muted text-ink-primary' : 'text-ink-muted hover:text-ink-secondary'}`}>{l}</button>
-              ))}
-            </div>
-            <button onClick={handleGenerateLowHealthTodo} disabled={todoGenerating || lowHealthCount === 0}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-500/35 text-[11px] font-mono text-amber-300 hover:bg-amber-500/10 disabled:opacity-50 disabled:cursor-not-allowed transition-all">
-              {todoGenerating ? '生成中...' : `生成今日清单${lowHealthCount > 0 ? ` (${Math.min(3, lowHealthCount)})` : ''}`}
-            </button>
-            <button onClick={() => setShowSync(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-terminal-border text-[11px] font-mono text-ink-secondary hover:text-accent-green hover:border-accent-green/40 transition-all">
-              <Plus size={12} /> 录入持仓
-            </button>
-            <button onClick={diagnose} disabled={loading}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent-green/10 border border-accent-green/30 text-accent-green text-[11px] font-semibold font-mono hover:bg-accent-green/20 disabled:opacity-50 transition-all">
-              <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
-              {loading ? '刷新中...' : '立即刷新'}
-            </button>
           </div>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          <div className="flex rounded-lg border border-terminal-border overflow-hidden text-[10px] font-mono">
+            {[{ k: 'priority', l: '按信号' }, { k: 'pnl', l: '按盈亏' }, { k: 'health', l: '按健康分' }].map(({ k, l }) => (
+              <button key={k} onClick={() => setSortBy(k as typeof sortBy)}
+                className={`px-2.5 py-1.5 transition-colors ${sortBy === k ? 'bg-terminal-muted text-ink-primary' : 'text-ink-muted hover:text-ink-secondary'}`}>{l}</button>
+            ))}
+          </div>
+          <button onClick={handleGenerateLowHealthTodo} disabled={todoGenerating || lowHealthCount === 0}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-500/35 text-[11px] font-mono text-amber-300 hover:bg-amber-500/10 disabled:opacity-50 disabled:cursor-not-allowed transition-all">
+            {todoGenerating ? '生成中...' : `生成今日清单${lowHealthCount > 0 ? ` (${Math.min(3, lowHealthCount)})` : ''}`}
+          </button>
+          <button onClick={() => setShowSync(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-terminal-border text-[11px] font-mono text-ink-secondary hover:text-accent-green hover:border-accent-green/40 transition-all">
+            <Plus size={12} /> 录入持仓
+          </button>
+          <button onClick={diagnose} disabled={loading}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent-green/10 border border-accent-green/30 text-accent-green text-[11px] font-semibold font-mono hover:bg-accent-green/20 disabled:opacity-50 transition-all">
+            <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
+            {loading ? '刷新中...' : '立即刷新'}
+          </button>
         </div>
       </header>
 
@@ -1229,12 +1264,19 @@ export default function PortfolioGuardian() {
 
         {!loading && items.length === 0 && !error && <EmptyState onSync={() => setShowSync(true)} onDiag={diagnose} />}
         {items.length > 0 && <StatsBar items={items} />}
-        {healthTrend.length > 0 && <HealthTrendPanel items={healthTrend} />}
         {items.length > 0 && <PriorityQueue items={items} onPick={setModalItem} />}
+        {healthTrend.length > 0 && <HealthTrendPanel items={healthTrend} />}
         {sorted.length > 0 && (
           <div className="space-y-3">
             {sorted.map(item => (
-              <PositionCard key={item.stock_code} item={item} events={eventMap[item.stock_code] ?? []} onModal={() => setModalItem(item)} />
+              <PositionCard
+                key={item.stock_code}
+                item={item}
+                events={eventMap[item.stock_code] ?? []}
+                onModal={() => setModalItem(item)}
+                expanded={!!expandedMap[item.stock_code]}
+                onToggle={() => setExpandedMap(prev => ({ ...prev, [item.stock_code]: !prev[item.stock_code] }))}
+              />
             ))}
           </div>
         )}
